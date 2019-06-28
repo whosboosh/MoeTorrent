@@ -11,6 +11,8 @@ export default [
     component: Home,
     path: '/',
     exact: true,
-    fetchInitialData: (path = '') => fetchDownloads()
+    fetchInitialData: () => {
+      return fetchDownloads()
+    }
   }
 ]

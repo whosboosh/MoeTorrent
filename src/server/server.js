@@ -24,6 +24,11 @@ app.use(cors())
 
 app.use(express.static('public'))
 
+// API route
+import api from '../api'
+import { errorHandler } from '../api/middleware'
+app.use('/api', api()) // Simple REST API to handle fetching / sending torrents to client
+
 const HTMLShell = (html, bundles, css, scripts, helmet, data) => `
 <!DOCTYPE html>
 <html>
@@ -51,6 +56,7 @@ const HTMLShell = (html, bundles, css, scripts, helmet, data) => `
   </body>
 </html>
 `
+
 app.get('*', async (req, res, next) => {
   try {
     const activeRoute = routes.find((route) => matchPath(url.parse(req.url).pathname, route)) || {}
@@ -94,6 +100,7 @@ const renderApp = (req, res, data) => {
   res.status(200).send(HTMLShell(html, bundles, css, scripts, helmet, data))
 }
 
+app.use(errorHandler) // Error handler middlware
 Loadable.preloadAll().then(() => {
   app.listen(3002, () => {
     console.log('Server is listening on port 3002!')
