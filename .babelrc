@@ -1,6 +1,6 @@
 {
   "plugins": [
-    "react-loadable/babel",
+    "react-loadable/babel"
   ],
   "presets": [
     "@babel/preset-react",

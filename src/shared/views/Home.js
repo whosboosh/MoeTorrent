@@ -1,16 +1,35 @@
+import { connect } from 'react-redux'
 import React, { Component } from 'react'
+import { fetchDownloads } from '../redux/actions'
 
 class Home extends Component {
-  render () {
-    const { data } = this.props
+  constructor() {
+    super();
+    this.state = { data: [] };
+  }
+  
+  componentDidMount() {
+    const { dispatch } = this.props
+    dispatch(fetchDownloads())
+  }
 
+  render () {
+    const { downloads } = this.props
     return (
       <div>
         <h1>Hi</h1>
-        <p>{data}</p>
+        <p>asd</p>
       </div>
     )
   }
 }
 
-export default Home
+function mapStateToProps(state) {
+  const { downloads } = state
+  return {
+    downloads
+  }
+}
+ 
+
+export default connect(mapStateToProps)(Home)

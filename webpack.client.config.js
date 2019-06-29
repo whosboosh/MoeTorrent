@@ -14,7 +14,7 @@ const isProduction = process.env.NODE_ENV === 'production'
 const baseConfig = {
   target: 'web',
   entry: {
-    client: ['@babel/polyfill', `./src/client/index.js`],
+    client: [`./src/client/index.js`],
     vendor: ['react', 'react-dom', 'react-router-dom']
   },
   output: {

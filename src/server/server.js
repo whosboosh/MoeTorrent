@@ -11,6 +11,12 @@ import manifest from '../../public/react-loadable.json'
 import Loadable from 'react-loadable'
 import url from 'url'
 import files from '../../public/manifest.json'
+import axios from 'axios'
+
+// Redux
+import { Provider } from 'react-redux'
+import { applyMiddleware } from 'redux'
+import configureStore from '../shared/redux/store'
 
 // Routes import
 import routes from '../shared/router/routes'
@@ -18,18 +24,18 @@ import routes from '../shared/router/routes'
 // Client app import
 import App from '../shared/router'
 
+// API route
+import api from '../api'
+import { errorHandler } from '../api/middleware'
+
 const app = express()
 
 app.use(cors())
 
 app.use(express.static('public'))
-
-// API route
-import api from '../api'
-import { errorHandler } from '../api/middleware'
 app.use('/api', api()) // Simple REST API to handle fetching / sending torrents to client
 
-const HTMLShell = (html, bundles, css, scripts, helmet, data) => `
+const HTMLShell = (html, bundles, css, scripts, helmet, store) => `
 <!DOCTYPE html>
 <html>
   <head>
@@ -52,7 +58,7 @@ const HTMLShell = (html, bundles, css, scripts, helmet, data) => `
     ${scripts.map(script => {
     return `<script src="/dist/${script}"></script>`
   }).join('\n')}  
-    <script>window.__INITIAL_DATA__ = ${serialize(data)}</script>    
+    <script>window.__INITIAL_STATE__ = ${serialize(store.getState())}</script>    
   </body>
 </html>
 `
@@ -61,24 +67,30 @@ app.get('*', async (req, res, next) => {
   try {
     const activeRoute = routes.find((route) => matchPath(url.parse(req.url).pathname, route)) || {}
 
-    const data = await activeRoute.fetchInitialData()
+    let initialState = {
+      fetchDownloads: await axios.get(`http://localhost:3002/api/downloads`).data
+    }
 
-    renderApp(req, res, data)
+    const store = configureStore(initialState)
+
+    renderApp(req, res, store)
   } catch (e) {
     next(e)
   }
 })
 
-const renderApp = (req, res, data) => {
+const renderApp = (req, res, store) => {
   const context = {}
   const modules = []
 
   const html = renderToString(
-    <Loadable.Capture report={moduleName => modules.push(moduleName)}>
-      <StaticRouter location={req.url} context={context}>
-        <App data={serialize(data)} />
-      </StaticRouter>
-    </Loadable.Capture>
+    <Provider store={store}>
+      <Loadable.Capture report={moduleName => modules.push(moduleName)}>
+        <StaticRouter location={req.url} context={context}>
+          <App />
+        </StaticRouter>
+      </Loadable.Capture>
+    </Provider>
   )
 
   const helmet = Helmet.renderStatic()
@@ -97,7 +109,7 @@ const renderApp = (req, res, data) => {
   }
 
   let bundles = getBundles(manifest, modules)
-  res.status(200).send(HTMLShell(html, bundles, css, scripts, helmet, data))
+  res.status(200).send(HTMLShell(html, bundles, css, scripts, helmet, store))
 }
 
 app.use(errorHandler) // Error handler middlware

@@ -4,7 +4,8 @@ import Loadable from 'react-loadable' // Disable for hot-loading
 import Home from '../views/Home'
 
 // Initial loading API
-import { fetchDownloads } from '../api'
+//import { fetchDownloads } from '../api'
+import { fetchDownloads } from '../redux/actions'
 
 export default [
   {
@@ -12,7 +13,7 @@ export default [
     path: '/',
     exact: true,
     fetchInitialData: () => {
-      return fetchDownloads()
+      return fetchDownloads
     }
   }
 ]
