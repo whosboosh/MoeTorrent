@@ -1,3 +1,4 @@
+const webpack = require('webpack')
 const { resolve } = require('path')
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 const webpackMerge = require('webpack-merge')
@@ -48,11 +49,9 @@ const baseConfig = {
 
   context: projectRoot,
 
-  entry: ['@babel/polyfill', resolve(sourceFolder, 'index')],
-
   output: {
-    filename: 'js/[name].js',
     path: buildFolder,
+    filename: 'js/[name].js',
     publicPath: '/',
   },
   
@@ -67,27 +66,42 @@ const baseConfig = {
         ignore: [htmlTemplateFile],
       },
     ]),
-    new CleanWebpackPlugin(),
   ],
 }
 
 const devConfig = {
   mode: 'development',
+
   plugins: [
+    new webpack.HotModuleReplacementPlugin(),
     new HtmlWebpackPlugin({
       template: htmlTemplateFile,
       chunksSortMode: 'dependency',
     }),
   ],
+
   devtool: 'inline-source-map',
-  devServer: {
-    hot: true,
-    historyApiFallback: true,
-  },
+
+  entry: [
+    'react-hot-loader/patch',
+    '@babel/polyfill',
+    "webpack-hot-middleware/client?path=/__webpack_hmr&timeout=20000",
+    resolve(sourceFolder, 'index')
+  ],  
+
+  output: {
+    hotUpdateChunkFilename: ".hot/[id].[hash].hot-update.js",
+    hotUpdateMainFilename: ".hot/[hash].hot-update.json"
+  }
 }
 
 const prodConfig = {
   mode: 'production',
+  
+  entry: [
+    '@babel/polyfill',
+    resolve(sourceFolder, 'index')
+  ],
 
   optimization: {
     minimize: true,
