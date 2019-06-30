@@ -2,7 +2,7 @@
 // Error handler
 const errorHandler = (err, req, res, next) => {
   const code = res.statusCode
-  console.log(err)
+  //console.log(err)
   // if status 200 change to 500, otherwise get the defined status code
   res.status(code === 200 ? 500 : code)
   res.json({ id: req.id, status: code, error: err.toString() })

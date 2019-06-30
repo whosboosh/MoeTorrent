@@ -8,6 +8,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin')
 const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin')
 const OptimizeCssAssetsWebpackPlugin = require('optimize-css-assets-webpack-plugin')
 const BrotliPlugin = require('brotli-webpack-plugin');
+const WatchIgnorePlugin = require('watch-ignore-webpack-plugin')
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -16,6 +17,9 @@ const sourceFolder = resolve(projectRoot, 'src')
 const buildFolder = resolve(projectRoot, 'build')
 const publicFolder = resolve(projectRoot, 'public')
 const htmlTemplateFile = resolve(publicFolder, 'index.html')
+const torrentsFile = resolve(publicFolder, 'torrents.json')
+
+console.log(torrentsFile)
 
 const babelRule = {
   test: /\.(js|tsx?)$/,
@@ -63,7 +67,7 @@ const baseConfig = {
     new CopyWebpackPlugin([
       {
         from: publicFolder,
-        ignore: [htmlTemplateFile],
+        ignore: [htmlTemplateFile, torrentsFile],
       },
     ]),
   ],
@@ -78,12 +82,14 @@ const devConfig = {
       template: htmlTemplateFile,
       chunksSortMode: 'dependency',
     }),
+    new WatchIgnorePlugin([
+      torrentsFile
+    ]),    
   ],
 
   devtool: 'inline-source-map',
 
   entry: [
-    'react-hot-loader/patch',
     '@babel/polyfill',
     "webpack-hot-middleware/client?path=/__webpack_hmr&timeout=20000",
     resolve(sourceFolder, 'index')

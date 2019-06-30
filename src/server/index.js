@@ -15,7 +15,7 @@ const buildFolder = resolve(projectRoot, 'build')
 // Middleware
 const api = require('./routes/api')
 
-app.use(morgan('dev'))
+//app.use(morgan('dev'))
 app.use(cors())
 
 // Body parser
