@@ -32,6 +32,18 @@ app.get('/', (req, res) => {
   res.sendFile(buildFolder + '/index.html')
 })
 
+const errorHandler = (err, req, res, next) => {
+  if(req.ws){
+      console.error("ERROR from WS route - ", err)
+      req.ws.send(JSON.stringify({ status: 'error', err }))
+  } else {
+      console.error(err);
+      res.setHeader('Content-Type', 'text/plain')
+      res.status(500).send(err.stack)
+  }
+}
+app.use(errorHandler);
+
 app.use(
   require('webpack-dev-middleware')(compiler, {
     noInfo: true,

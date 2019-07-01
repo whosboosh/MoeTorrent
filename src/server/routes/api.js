@@ -66,7 +66,7 @@ const api = (expressWs) => {
           user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
         }
       }
-    })
+    }) 
 
     ws.on('message', (message) => {
       const parsed = JSON.parse(message)
@@ -85,6 +85,10 @@ const api = (expressWs) => {
 
           writeTorrent(destructureTorrent(torrent))
             .then(() => console.log('Wrote torrent to disk'))
+            .catch(e => {
+              let err = e.toString()
+              return next(err)              
+            })
 
           torrent.on('download', (bytes) => {
             sendDownloadInformation(torrent)
@@ -93,6 +97,10 @@ const api = (expressWs) => {
           torrent.on('done', () => {
             writeTorrent(destructureTorrent(torrent))
               .then(() => completeTorrent(torrent))  
+              .catch(e => {
+                let err = e.toString()
+                return next(err)              
+              })              
           })
 
           for (const user of connectedUsers) {
@@ -106,7 +114,10 @@ const api = (expressWs) => {
 
         if (torrent != null) {
           removeTorrent(torrent)
-            .catch(e => { return next(e) })          
+            .catch(e => {
+              let err = e.toString()
+              return next(err)              
+            })         
           for (let p in torrent._peers) {
             if (torrent._peers[p].wire != null) {
               torrent.wires.push(torrent._peers[p].wire)
@@ -118,13 +129,9 @@ const api = (expressWs) => {
             if (err) return next(err)
           })
 
-          let simpleTorrent = {
-            infoHash: torrent.infoHash
-          }
-
           for (const user of connectedUsers) {
             if (user.readyState === 1) {
-              user.send(JSON.stringify({ status: 'delete', data: simpleTorrent }))
+              user.send(JSON.stringify({ status: 'delete', data: destructureTorrent(torrent) }))
             }
           }
         }
@@ -217,11 +224,7 @@ const completeTorrent = (torrent) => {
       .then(() => console.log('Removed torrent: ' + torrent.infoHash))
       .catch(e => {
         let err = e.toString()
-        for (const user of connectedUsers) {
-          if (user.readyState === 1) {
-            user.send(JSON.stringify({ status: 'error', err }))
-          }          
-        }
+        return next(err)
       })
 
     torrent.removeListener('download', () => {
@@ -230,7 +233,7 @@ const completeTorrent = (torrent) => {
 
     for (const user of connectedUsers) {
       if (user.readyState === 1) {
-        user.send(JSON.stringify({ status: 'delete', data: destructureTorrent(torrent) }))
+        user.send(JSON.stringify({ status: 'complete', data: destructureTorrent(torrent) }))
       }
     }
 }
@@ -296,7 +299,7 @@ const openTorrents = () => {
 
 const destructureTorrent = (torrent) => {
   let file = {
-    name: torrent.files[0].name,
+    name: typeof torrent.files[0] === 'undefined' ? '' : torrent.files[0].name,
     infoHash: torrent.infoHash,
     timeRemaining: torrent.timeRemaining,
     received: torrent.received,

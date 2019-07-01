@@ -50,15 +50,27 @@ class Home extends Component {
         const torrents = this.state.torrents
         const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash)
 
-        const message = `${parsed.data.name}(${parsed.data.infoHash}) Finished downloading`
+        const message = `${parsed.data.name}(${parsed.data.infoHash}) Deleted`
 
         torrents.splice(index, 1)
         this.setState({ torrents, showSuccess: true, message })
+      } else if (parsed.status === 'complete') {
+        const torrents = this.state.torrents
+        const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash)
+
+        const message = `${parsed.data.name}(${parsed.data.infoHash}) Finished downloading`
+
+        torrents.splice(index, 1)
+        this.setState({ torrents, showSuccess: true, message })        
       } else if (parsed.status === 'collection') {
         this.setState({ torrents: parsed.data })
       } else if (parsed.status === 'error') {
         this.setState({ error: parsed.err, showError: true })
       }
+    }
+
+    client.onerror = (err) => {
+      this.setState({ error: parsed.err, showError: true })
     }
   }
 
