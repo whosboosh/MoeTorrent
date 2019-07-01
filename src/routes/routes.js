@@ -1,7 +1,5 @@
 import React, { Component } from 'react'
-import Loadable from 'react-loadable' // Disable for hot-loading
-
-//import Home from '../views/Home'
+import Loadable from 'react-loadable'
 
 const Home = Loadable({
   loader: () => import('../views/Home'),
@@ -10,9 +8,6 @@ const Home = Loadable({
   },
   delay: 300,
 });
-
-// Initial loading API
-//import { fetchDownloads } from '../api'
 
 export default [
   {

@@ -1,28 +1,30 @@
 {
   "name": "moe-torrent-client",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Simple react torrent app",
   "main": "src/index.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development webpack-dev-server --open",
     "build": "cross-env NODE_ENV=development webpack --config webpack.config.js",
+    "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
     "server": "cross-env NODE_ENV=development node src/server",
-    "start": "npm run build & npm run server"
+    "server:prod": "cross-env NODE_ENV=production node src/server",
+    "dev": "npm run build & npm run server",
+    "prod": "npm run build:prod & npm run server:prod"
   },
   "keywords": [
     "react",
     "redux",
     "webpack",
-    "jest",
-    "styled-components",
-    "starter",
-    "boilerplate"
+    "torrent",
+    "web",
+    "selfhosted",
+    "self-hosted"
   ],
-  "author": "Leonardo Maldonado <leonardomso11@gmail.com>",
+  "author": "nathanial292",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leonardomso/react-bolt.git"
+    "url": "git+https://github.com/nathanial292/MoeTorrent.git"
   },
   "devDependencies": {
     "@babel/core": "^7.4.5",
@@ -60,6 +62,8 @@
   },
   "dependencies": {
     "axios": "^0.19.0",
+    "bootstrap": "^4.3.1",
+    "moment": "^2.24.0",
     "node-fetch": "^2.6.0",
     "parse-torrent": "^6.1.2",
     "react": "^16.8.6",

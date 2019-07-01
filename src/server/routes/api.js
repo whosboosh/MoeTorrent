@@ -1,103 +1,194 @@
 const { Router } = require('express')
-const webTorrent = require('webtorrent')
-const parseTorrent = require('parse-torrent')
+const WebTorrent = require('webtorrent')
 const fs = require('fs')
-const { resolve } = require('path') 
+require('events').EventEmitter.prototype._maxListeners = 200
 
 const torrentFile = 'public/torrents.json'
 
-const api = () => {
+const connectedUsers = []
+
+const api = (expressWs) => {
   const router = Router()
 
-  const client = new webTorrent()
+  const client = new WebTorrent()
+
+  client.on('error', (error) => {
+    let err = error.toString()
+    for (const user of connectedUsers) {
+      user.send(JSON.stringify({ status: 'error', err }))
+    }
+  })
 
   // Add torrents to start downloading from previous opening
   openTorrents()
-    .then(torrents => {    
+    .then(torrents => {
       for (const prop in torrents) {
         let opts = {
-          path: torrents[prop].path  
-        }          
-        client.add(torrents[prop].infoHash, opts, (parsedTorrent) => {
-          console.log('Loaded torrent'+parsedTorrent.infoHash+' from JSON')
+          path: torrents[prop].path
+        }
+        new Promise((resolve) => {
+          client.add(torrents[prop].infoHash, opts, (parsedTorrent) => {
+            resolve(parsedTorrent)
+          })
         })
+          .then((torrent) => subscribeTorrents(client, torrent))
       }
     })
     .catch(e => console.log(e))
 
+  router.ws('/', (ws, req, next) => {
+    const aWss = expressWs.getWss('/a')
 
-  // Get existing downloads
-  router.get('/', async (req, res) => {
-    // Add torrents without extra information to array
-    const torrents = []
-    for (const torrent of client.torrents) {
-      let file = destructureTorrent(torrent)
-      if (file.timeRemaining > 0) {
-        torrents.push(file)
+    aWss.clients.forEach(user => {
+      user.id = generateID()
+      user.counter = 0
+      if (connectedUsers.map(e => { return e.id }).indexOf(user.id) === -1) {
+        connectedUsers.push(user)
       }
-    }
-    res.status(200).json(torrents)
-  })
-
-  // Add a torrent
-  router.post('/url', async (req, res, next) => {
-    const torrent = req.body.url
-    const title = req.body.title
-
-    if (typeof title === 'undefined') {
-      res.status(400)
-      return next('Must provide a title')
-    }
-
-    if (typeof torrent === 'undefined') {
-      res.status(400)
-      return next('No torrent provided')
-    }
-
-    const opts = {
-      path: `J:\\anime\\${string_to_slug(title)}`  
-    }
-
-    client.add(torrent, opts, (torrentFile) => {
-      
-      writeTorrent(destructureTorrent(torrentFile))
-        .catch(e => {return next(e)})
-      res.status(200).json({ status: 'Complete', torrent: torrentFile.infoHash })
+      for (const torrent of client.torrents) {
+        if (user.readyState === 1) {
+          user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
+        }
+      }
     })
 
-    client.on('error', (err) => {
-      return next(err)
-    })    
+    ws.on('message', (message) => {
+      const parsed = JSON.parse(message)
+      if (typeof parsed.data === 'undefined') {
+        return next('No torrent provided')
+      } else if (parsed.status === 'addTorrent') {
+        // Add torrent to client
+        let opts = {}
+        if (typeof parsed.title !== 'undefined' && typeof parsed.location !== 'undefined') {
+          console.log(parsed.title)
+          opts = {
+            path: `${parsed.location}\\${stringToSlug(parsed.title)}`
+          }
+        }
+        client.add(parsed.data, opts, (torrent) => {
+          console.log('Adding torrent: ' + torrent.infoHash)
+
+          writeTorrent(destructureTorrent(torrent))
+            .then(() => console.log('Wrote torrent to disk'))
+            .catch(e => { return next(e) })
+
+          for (const user of connectedUsers) {
+            if (user.readyState === 1) {
+              user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
+            }
+          }
+
+          torrent.on('download', (bytes) => {
+            for (const user of connectedUsers) {
+              const index = connectedUsers.map(e => { return e.id }).indexOf(user.id)
+              if (user.counter % 1 === 0) {
+                if (user.readyState === 1) {
+                  user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
+                } else {
+                  console.log('Terminating' + user.id)
+                  connectedUsers.splice(index, 1)
+                  user.terminate()
+                }
+              }
+              user.counter++
+            }
+          })
+
+          torrent.on('done', () => {
+            console.log('Torrent complete')
+
+            removeTorrent(torrent)
+              .then(() => console.log('Removed torrent: ' + torrent.infoHash))
+              .catch(e => { return next(e) })
+
+            torrent.removeListener('download', () => {
+              console.log('Removed download listener for ' + torrent.infoHash)
+            })
+          })
+        })
+      } else if (parsed.status === 'removeTorrent') {
+        const torrent = client.get(parsed.data.infoHash)
+        removeTorrent(torrent)
+          .catch(e => { return next(e) })
+
+        for (let p in torrent._peers) {
+          if (torrent._peers[p].wire != null) {
+            torrent.wires.push(torrent._peers[p].wire)
+          }
+        }
+        torrent.resume()
+
+        client.remove(torrent, (err) => {
+          if (err) return next(err)
+        })
+
+        for (const user of connectedUsers) {
+          user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
+        }
+      } else if (parsed.status === 'pauseTorrent') {
+        const torrent = client.get(parsed.data.infoHash)
+        torrent.pause()
+        torrent.wires = []
+      } else if (parsed.status === 'resumeTorrent') {
+        const torrent = client.get(parsed.data.infoHash)
+        for (let p in torrent._peers) {
+          if (torrent._peers[p].wire != null) {
+            torrent.wires.push(torrent._peers[p].wire)
+          }
+        }
+        torrent.resume()
+      }
+    })
   })
 
-  // Delete a torrent
-  router.post('/remove', async (req, res, next) => {
-    const torrent = req.body.url
-
-    if (typeof torrent === 'undefined') {
-      res.status(400)
-      return next('No torrent provided')
-    }    
-
-    if (torrent.includes('.torrent')) {
-      parseTorrent.remote(torrent, (err, parsed) => {
-        if (err) return next(err)
-        removeMiddleware(req, res, next, parsed)
-      })
-    } else {
-      const parsed = parseTorrent(torrent)
-      removeMiddleware(req, res, next, parsed)
-    }
-  })
-  
   return router
 }
 
-const removeMiddleware = ((req, res, next, torrent) => {
-  removeTorrent(torrent)
-    .catch(e => {return next(e)})
-  res.status(200).json('Torrent removed' + torrent)  
-})
+const generateID = () => {
+  return '_' + Math.random().toString(36).substr(2, 9)
+}
+
+const subscribeTorrents = (client, torrent) => {
+  // Add torrents without extra information to array
+  console.log('Loaded torrent ' + torrent.infoHash + ' from JSON, subscribing to events')
+
+  torrent.on('download', (bytes) => {
+    for (const user of connectedUsers) {
+      const index = connectedUsers.map(e => { return e.id }).indexOf(user.id)
+      if (user.counter % 1 === 0) {
+        if (user.readyState === 1) {
+          user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
+        } else {
+          console.log('Terminating' + user.id)
+          connectedUsers.splice(index, 1)
+          user.terminate()
+        }
+      }
+      user.counter++
+    }
+  })
+
+  torrent.on('done', () => {
+    console.log('Torrent complete')
+
+    removeTorrent(torrent)
+      .then(() => console.log('Removed torrent: ' + torrent.infoHash))
+      .catch(e => {
+        let err = e.toString()
+        for (const user of connectedUsers) {
+          user.send(JSON.stringify({ status: 'error', err }))
+        }
+      })
+
+    for (const user of connectedUsers) {
+      user.send(JSON.stringify({ status: 'delete', data: destructureTorrent(torrent) }))
+    }
+
+    torrent.removeListener('download', () => {
+      console.log('Removed download listener for ' + torrent.infoHash)
+    })
+  })
+}
 
 const writeTorrent = (torrent) => {
   return new Promise((resolve, reject) => {
@@ -106,9 +197,10 @@ const writeTorrent = (torrent) => {
       let json
       try {
         json = JSON.parse(data)
-      } catch(e) {
-        json = {}
+      } catch (e) {
+        return reject(e)
       }
+
       if (!json[torrent.infoHash]) {
         json[torrent.infoHash] = torrent
       }
@@ -122,22 +214,23 @@ const writeTorrent = (torrent) => {
 }
 
 const removeTorrent = (torrent) => {
-  return new Promise((resolve, reject) => {  
+  return new Promise((resolve, reject) => {
     fs.readFile(torrentFile, (err, data) => {
       if (err) reject(err)
-      let json      
+      let json
       try {
         json = JSON.parse(data)
-      } catch(e) {
+      } catch (e) {
         return reject(e)
       }
+
       delete json[torrent.infoHash]
 
       fs.writeFile(torrentFile, JSON.stringify(json, null, 4), (err) => {
         if (err) return reject(err)
         return resolve()
       })
-    })  
+    })
   })
 }
 
@@ -145,9 +238,10 @@ const openTorrents = () => {
   return new Promise((resolve, reject) => {
     fs.readFile(torrentFile, (err, data) => {
       if (err) return reject(err)
+      let json
       try {
         json = JSON.parse(data)
-      } catch(e) {
+      } catch (e) {
         return reject(e)
       }
       return resolve(json)
@@ -169,26 +263,26 @@ const destructureTorrent = (torrent) => {
     ratio: torrent.ratio,
     numPeers: torrent.numPeers,
     path: torrent.path
-  }  
+  }
   return file
 }
 
-function string_to_slug(str) {
-  str = str.replace(/^\s+|\s+$/g, ''); // trim
-  str = str.toLowerCase();
+function stringToSlug (str) {
+  str = str.replace(/^\s+|\s+$/g, '') // trim
+  str = str.toLowerCase()
 
   // remove accents, swap ñ for n, etc
-  var from = "àáäâèéëêìíïîòóöôùúüûñç·/_,:;";
-  var to = "aaaaeeeeiiiioooouuuunc------";
+  var from = 'àáäâèéëêìíïîòóöôùúüûñç·/_,:;'
+  var to = 'aaaaeeeeiiiioooouuuunc------'
   for (var i = 0, l = from.length; i < l; i++) {
-    str = str.replace(new RegExp(from.charAt(i), 'g'), to.charAt(i));
+    str = str.replace(new RegExp(from.charAt(i), 'g'), to.charAt(i))
   }
 
   str = str.replace(/[^a-z0-9 -]/g, '') // remove invalid chars
     .replace(/\s+/g, '-') // collapse whitespace and replace by -
-    .replace(/-+/g, '-'); // collapse dashes
+    .replace(/-+/g, '-') // collapse dashes
 
-  return str;
+  return str
 }
 
 module.exports = api

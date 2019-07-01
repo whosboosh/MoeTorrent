@@ -2,13 +2,11 @@ const webpack = require('webpack')
 const { resolve } = require('path')
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 const webpackMerge = require('webpack-merge')
-const { CleanWebpackPlugin } = require('clean-webpack-plugin')
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
 const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin')
 const OptimizeCssAssetsWebpackPlugin = require('optimize-css-assets-webpack-plugin')
-const BrotliPlugin = require('brotli-webpack-plugin');
-const WatchIgnorePlugin = require('watch-ignore-webpack-plugin')
+const BrotliPlugin = require('brotli-webpack-plugin')
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -17,35 +15,35 @@ const sourceFolder = resolve(projectRoot, 'src')
 const buildFolder = resolve(projectRoot, 'build')
 const publicFolder = resolve(projectRoot, 'public')
 const htmlTemplateFile = resolve(publicFolder, 'index.html')
-const torrentsFile = resolve(publicFolder, 'torrents.json')
-
-console.log(torrentsFile)
+// const torrentsFile = resolve(publicFolder, 'torrents.json')
 
 const babelRule = {
   test: /\.(js|tsx?)$/,
-  use: 'babel-loader',
+  use: 'babel-loader'
 }
 
 const sassRule = {
   test: /\.scss$/,
   use: [
     isProduction
-      ? MiniCssExtractPlugin.loader
+      ? {
+        loader: MiniCssExtractPlugin.loader,
+        options: {
+          hmr: process.env.NODE_ENV === 'development',
+          reloadAll: process.env.NODE_ENV === 'development'
+        }
+      }
       : {
         loader: 'style-loader',
         options: {
-          singleton: true,
-        },
+          singleton: true
+        }
       },
     { loader: 'css-loader' },
     {
-      loader: 'sass-loader',
-      options: {
-        data: "@import './styles/_.scss';",
-        includePaths: [sourceFolder],
-      },
-    },
-  ],
+      loader: 'sass-loader'
+    }
+  ]
 }
 
 const baseConfig = {
@@ -56,21 +54,21 @@ const baseConfig = {
   output: {
     path: buildFolder,
     filename: 'js/[name].js',
-    publicPath: '/',
+    publicPath: '/'
   },
-  
+
   module: {
-    rules: [babelRule, sassRule],
+    rules: [babelRule, sassRule]
   },
 
   plugins: [
     new CopyWebpackPlugin([
       {
         from: publicFolder,
-        ignore: [htmlTemplateFile, torrentsFile],
-      },
-    ]),
-  ],
+        ignore: [htmlTemplateFile]
+      }
+    ])
+  ]
 }
 
 const devConfig = {
@@ -80,30 +78,27 @@ const devConfig = {
     new webpack.HotModuleReplacementPlugin(),
     new HtmlWebpackPlugin({
       template: htmlTemplateFile,
-      chunksSortMode: 'dependency',
-    }),
-    new WatchIgnorePlugin([
-      torrentsFile
-    ]),    
+      chunksSortMode: 'dependency'
+    })
   ],
 
   devtool: 'inline-source-map',
 
   entry: [
     '@babel/polyfill',
-    "webpack-hot-middleware/client?path=/__webpack_hmr&timeout=20000",
+    'webpack-hot-middleware/client?path=/__webpack_hmr&timeout=20000',
     resolve(sourceFolder, 'index')
-  ],  
+  ],
 
   output: {
-    hotUpdateChunkFilename: ".hot/[id].[hash].hot-update.js",
-    hotUpdateMainFilename: ".hot/[hash].hot-update.json"
+    hotUpdateChunkFilename: '.hot/[id].[hash].hot-update.js',
+    hotUpdateMainFilename: '.hot/[hash].hot-update.json'
   }
 }
 
 const prodConfig = {
   mode: 'production',
-  
+
   entry: [
     '@babel/polyfill',
     resolve(sourceFolder, 'index')
@@ -111,12 +106,12 @@ const prodConfig = {
 
   optimization: {
     minimize: true,
-    nodeEnv: 'production',
+    nodeEnv: 'production'
   },
 
   plugins: [
     new MiniCssExtractPlugin({
-      filename: 'css/[name].css',
+      filename: 'css/[name].css'
     }),
 
     new OptimizeCssAssetsWebpackPlugin(),
@@ -133,9 +128,9 @@ const prodConfig = {
         keepClosingSlash: true,
         minifyJS: true,
         minifyCSS: true,
-        minifyURLs: true,
+        minifyURLs: true
       },
-      inject: true,
+      inject: true
     }),
     new HtmlWebpackInlineSourcePlugin(),
     new BrotliPlugin({
@@ -143,14 +138,14 @@ const prodConfig = {
       test: /\.(js|css|html|svg)$/,
       threshold: 10240,
       minRatio: 0.8
-    }),
+    })
   ],
 
   performance: {
     maxAssetSize: 1000 * 500, // 500KB
     // we only care about the size of compressed files
-    assetFilter: (filename) => filename.endsWith('.br'),
-  },
+    assetFilter: (filename) => filename.endsWith('.br')
+  }
 }
 
 const finalConfig = () => {
