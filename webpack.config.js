@@ -7,6 +7,8 @@ const HtmlWebpackPlugin = require('html-webpack-plugin')
 const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin')
 const OptimizeCssAssetsWebpackPlugin = require('optimize-css-assets-webpack-plugin')
 const BrotliPlugin = require('brotli-webpack-plugin')
+const CompressionPlugin = require('compression-webpack-plugin')
+const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -62,6 +64,7 @@ const baseConfig = {
   },
 
   plugins: [
+    new CleanWebpackPlugin(),
     new CopyWebpackPlugin([
       {
         from: publicFolder,
@@ -135,10 +138,13 @@ const prodConfig = {
     new HtmlWebpackInlineSourcePlugin(),
     new BrotliPlugin({
       asset: '[path].br[query]',
-      test: /\.(js|css|html|svg)$/,
-      threshold: 10240,
-      minRatio: 0.8
+      test: /\.(js|css|html|svg)$/
     })
+    /*
+    new CompressionPlugin({
+      test: /\.js(\?.*)?$/i,
+      filename: '[path].gz[query]',
+    })*/
   ],
 
   performance: {
