@@ -1,7 +1,7 @@
 const { Router } = require('express')
 const WebTorrent = require('webtorrent')
 const fs = require('fs')
-require('events').EventEmitter.prototype._maxListeners = 200
+require('events').EventEmitter.prototype._maxListeners = 500
 
 const torrentFile = 'public/torrents.json'
 
@@ -15,7 +15,9 @@ const api = (expressWs) => {
   client.on('error', (error) => {
     let err = error.toString()
     for (const user of connectedUsers) {
-      user.send(JSON.stringify({ status: 'error', err }))
+      if (user.readyState === 1) {
+        user.send(JSON.stringify({ status: 'error', err }))
+      }
     }
   })
 
@@ -108,27 +110,38 @@ const api = (expressWs) => {
         })
       } else if (parsed.status === 'removeTorrent') {
         const torrent = client.get(parsed.data.infoHash)
-        removeTorrent(torrent)
-          .catch(e => { return next(e) })
 
-        for (let p in torrent._peers) {
-          if (torrent._peers[p].wire != null) {
-            torrent.wires.push(torrent._peers[p].wire)
+        if (torrent != null) {
+          removeTorrent(torrent)
+            .catch(e => { return next(e) })          
+          for (let p in torrent._peers) {
+            if (torrent._peers[p].wire != null) {
+              torrent.wires.push(torrent._peers[p].wire)
+            }
+          }
+          torrent.resume()
+
+          client.remove(torrent, (err) => {
+            if (err) return next(err)
+          })
+
+          let simpleTorrent = {
+            infoHash: torrent.infoHash
+          }
+
+          for (const user of connectedUsers) {
+            if (user.readyState === 1) {
+              user.send(JSON.stringify({ status: 'delete', data: simpleTorrent }))
+            }
           }
         }
-        torrent.resume()
 
-        client.remove(torrent, (err) => {
-          if (err) return next(err)
-        })
-
-        for (const user of connectedUsers) {
-          user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
-        }
       } else if (parsed.status === 'pauseTorrent') {
         const torrent = client.get(parsed.data.infoHash)
-        torrent.pause()
-        torrent.wires = []
+        if (torrent != null) {
+          torrent.pause()
+          torrent.wires = []
+        }
       } else if (parsed.status === 'resumeTorrent') {
         const torrent = client.get(parsed.data.infoHash)
         for (let p in torrent._peers) {
@@ -176,12 +189,16 @@ const subscribeTorrents = (client, torrent) => {
       .catch(e => {
         let err = e.toString()
         for (const user of connectedUsers) {
-          user.send(JSON.stringify({ status: 'error', err }))
+          if (user.readyState === 1) {
+            user.send(JSON.stringify({ status: 'error', err }))
+          }          
         }
       })
 
     for (const user of connectedUsers) {
-      user.send(JSON.stringify({ status: 'delete', data: destructureTorrent(torrent) }))
+      if (user.readyState === 1) {
+        user.send(JSON.stringify({ status: 'delete', data: destructureTorrent(torrent) }))
+      }
     }
 
     torrent.removeListener('download', () => {

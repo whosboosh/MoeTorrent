@@ -2,7 +2,7 @@ import React, { Component } from 'react'
 import { Container, Row, Col, Button, Card, Form, Alert } from 'react-bootstrap'
 import moment from 'moment'
 
-const client = new WebSocket('ws://localhost:3001/api')
+const client = new WebSocket('ws://localhost:3000/api')
 
 class Home extends Component {
   constructor (props) {
@@ -117,7 +117,7 @@ class Home extends Component {
                 <Row>
                   <Col xs={12}>{(item.downloaded / 1000000).toFixed(1)}MB / {((((item.downloaded / (item.progress * 100)) * 100) + item.downloaded) / 1000000).toFixed(1)}MB</Col>
                   <Col xs={12}>{(item.progress * 100).toFixed(2)}%</Col>
-                  <Col xs={12}>{(item.downloadSpeed / 100000).toFixed(2)}MB/s</Col>
+                  <Col xs={12}>{(item.downloadSpeed / 100000).toFixed(2)}Mb/s</Col>
                 </Row>
                 <Row>
                   <Col xs={12}>{moment(item.timeRemaining).format('hh:mm')}</Col>

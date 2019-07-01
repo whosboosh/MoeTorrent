@@ -7,7 +7,7 @@ const Home = Loadable({
     return <div>Loading...</div>
   },
   delay: 300,
-});
+})
 
 export default [
   {
