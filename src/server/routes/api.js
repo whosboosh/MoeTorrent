@@ -1,7 +1,7 @@
 const { Router } = require('express')
 const WebTorrent = require('webtorrent')
 const fs = require('fs')
-require('events').EventEmitter.prototype._maxListeners = 500
+require('events').EventEmitter.prototype._maxListeners = 20
 
 const torrentFile = 'public/torrents.json'
 
@@ -57,6 +57,7 @@ const api = (expressWs) => {
 
     aWss.clients.forEach(user => {
       user.id = generateID()
+      user.counter = 0
       if (connectedUsers.map(e => { return e.id }).indexOf(user.id) === -1) {
         connectedUsers.push(user)
       }
@@ -74,7 +75,7 @@ const api = (expressWs) => {
       } else if (parsed.status === 'addTorrent') {
         // Add torrent to client
         let opts = {}
-        if (typeof parsed.title !== 'undefined' && typeof parsed.location !== 'undefined') {
+        if (parsed.location !== '') {
           opts = {
             path: `${parsed.location}\\${stringToSlug(parsed.title)}`
           }
@@ -173,15 +174,42 @@ const subscribeTorrents = (client, torrent) => {
 const sendDownloadInformation = (torrent) => {
   for (const user of connectedUsers) {
     const index = connectedUsers.map(e => { return e.id }).indexOf(user.id)
-    if (user.readyState === 1) {
-      user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
-    } else {
-      console.log('Terminating' + user.id)
-      connectedUsers.splice(index, 1)
-      user.terminate()
+    let interval = calculateInterval(torrent)
+    if (user.counter % interval === 0) { 
+      if (user.readyState === 1) {
+        user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
+      } else {
+        console.log('Terminating' + user.id)
+        connectedUsers.splice(index, 1)
+        user.terminate()
+      }
     }
+    user.counter++
   }  
 }
+
+const calculateInterval = (torrent) => {
+  let inHigh = 13491245
+  let inLow = 1000
+
+  let outLow = possibleIntervals[0]
+  let outHigh = possibleIntervals[6]
+
+  let inSpan = inHigh - inLow  
+  let outSpan = outHigh - outLow
+
+  let scaleFactor = parseFloat(outSpan) / parseFloat(inSpan)
+
+  let num = torrent.downloadSpeed
+
+  let interval =  outLow + (num - inLow)*scaleFactor
+  return possibleIntervals.reduce((prev, curr) => {
+    return (Math.abs(curr - interval) < Math.abs(prev - interval) ? curr : prev);
+  })
+  
+}
+
+const possibleIntervals = [1, 2, 4, 10, 50, 100, 200, 400]
 
 const completeTorrent = (torrent) => {
     console.log('Torrent complete')
