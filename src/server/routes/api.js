@@ -105,7 +105,7 @@ const api = (expressWs) => {
 
           for (const user of connectedUsers) {
             if (user.readyState === 1) {
-              user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
+              user.send(JSON.stringify({ status: 'start', data: destructureTorrent(torrent) }))
             }
           }
         })
@@ -131,7 +131,7 @@ const api = (expressWs) => {
 
           for (const user of connectedUsers) {
             if (user.readyState === 1) {
-              user.send(JSON.stringify({ status: 'delete', data: destructureTorrent(torrent) }))
+              user.send(JSON.stringify({ status: 'delete', data: destructureTorrent(parsed.data) }))
             }
           }
         }
@@ -299,7 +299,7 @@ const openTorrents = () => {
 
 const destructureTorrent = (torrent) => {
   let file = {
-    name: typeof torrent.files[0] === 'undefined' ? '' : torrent.files[0].name,
+    name: typeof torrent.files === 'undefined' ? '' : torrent.files[0].name,
     infoHash: torrent.infoHash,
     timeRemaining: torrent.timeRemaining,
     received: torrent.received,

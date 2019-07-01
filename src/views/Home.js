@@ -1,6 +1,15 @@
 import React, { Component } from 'react'
 import { Container, Row, Col, Button, Card, Form, Alert } from 'react-bootstrap'
 import moment from 'moment'
+import { RingLoader } from 'react-spinners';
+import { css } from '@emotion/core';
+
+const override = css`
+    display: block;
+    margin: 0 auto;
+    border-color: white;
+    color: white;
+`;
 
 const client = new WebSocket('ws://localhost:3000/api')
 
@@ -15,7 +24,10 @@ class Home extends Component {
       error: '',
       showError: false,
       showSuccess: false,
-      message: ''
+      showStart: false,
+      message: '',
+      startMessage: '',
+      loading: false
     }
     this.handleChangeLocation = this.handleChangeLocation.bind(this)
     this.handleChangeValue = this.handleChangeValue.bind(this)
@@ -45,7 +57,15 @@ class Home extends Component {
           torrents.splice(index, 1)
         }
 
-        this.setState({ torrents })
+        this.setState({ torrents, loading: false })
+      } else if (parsed.status === 'start') {
+        console.log('STARTED')
+        const torrents = this.state.torrents
+        torrents.push(parsed.data)
+
+        const startMessage = `${parsed.data.name} has started downloading`
+
+        this.setState({ torrents, loading: false, showStart: true, startMessage })        
       } else if (parsed.status === 'delete') {
         const torrents = this.state.torrents
         const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash)
@@ -65,7 +85,7 @@ class Home extends Component {
       } else if (parsed.status === 'collection') {
         this.setState({ torrents: parsed.data })
       } else if (parsed.status === 'error') {
-        this.setState({ error: parsed.err, showError: true })
+        this.setState({ error: parsed.err, showError: true, loading: false })
       }
     }
 
@@ -108,6 +128,7 @@ class Home extends Component {
   handleSubmit (event) {
     event.preventDefault()
     this.addTorrent({ location: this.state.location, title: this.state.title, data: this.state.value })
+    this.setState({ loading: true })
   }
 
   handleDismissError () {
@@ -116,6 +137,10 @@ class Home extends Component {
 
   handleDismissSuccess () {
     this.setState({ showSuccess: false })
+  }
+
+  handleDismissStart () {
+    this.setState({ showStart: false })
   }
 
   render () {
@@ -151,6 +176,7 @@ class Home extends Component {
     )
     return (
       <div>
+        {this.state.showStart ? <StartAlert message={this.state.startMessage} handler={() => this.handleDismissStart()} /> : null}
         {this.state.showSuccess ? <SuccessAlert message={this.state.message} handler={() => this.handleDismissSuccess()} /> : null}
         {this.state.showError ? <ErrorAlert error={this.state.error} handler={() => this.handleDismissError()} /> : null}
         <h1>Torrents:</h1>
@@ -208,7 +234,14 @@ class Home extends Component {
                 </Row>
                 <Row>
                   <Col xs={12}>
-                    <Button type='submit' variant='dark'>Add Torrent</Button>
+                    <Button type='submit' variant='dark'>{this.state.loading ? 
+                      <RingLoader
+                        sizeUnit={"px"}
+                        css={override}
+                        size={30}
+                        color={'#FFFFFF'}
+                        loading={this.state.loading}
+                      /> : <p style={{height:'10px'}}>Add Torrent</p>}</Button>
                   </Col>
                 </Row>
               </Card.Body>
@@ -226,9 +259,23 @@ class ErrorAlert extends Component {
     const handleDismiss = () => this.props.handler()
     return (
       <Alert className='mt-2' display='none' variant='danger' onClose={handleDismiss} dismissible>
-        <Alert.Heading>Oh snap! You got an error!</Alert.Heading>
+        <Alert.Heading>Error!</Alert.Heading>
         <p>
           {this.props.error}
+        </p>
+      </Alert>
+    )
+  }
+}
+
+class StartAlert extends Component {
+  render () {
+    const handleDismiss = () => this.props.handler()
+    return (
+      <Alert className='mt-2' display='none' variant='info' onClose={handleDismiss} dismissible>
+        <Alert.Heading>Torrent Started</Alert.Heading>
+        <p>
+          {this.props.message }
         </p>
       </Alert>
     )
