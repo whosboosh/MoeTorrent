@@ -13,7 +13,9 @@ class Home extends Component {
       location: '',
       title: '',
       error: '',
-      showError: false
+      showError: false,
+      showSuccess: false,
+      message: ''
     }
     this.handleChangeLocation = this.handleChangeLocation.bind(this)
     this.handleChangeValue = this.handleChangeValue.bind(this)
@@ -48,8 +50,10 @@ class Home extends Component {
         const torrents = this.state.torrents
         const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash)
 
+        const message = `${parsed.data.name}(${parsed.data.infoHash}) Finished downloading`
+
         torrents.splice(index, 1)
-        this.setState({ torrents })
+        this.setState({ torrents, showSuccess: true, message })
       } else if (parsed.status === 'collection') {
         this.setState({ torrents: parsed.data })
       } else if (parsed.status === 'error') {
@@ -61,7 +65,8 @@ class Home extends Component {
   addTorrent (torrent) {
     const location = torrent.location
     const data = torrent.data
-    client.send(JSON.stringify({ status: 'addTorrent', data, location }))
+    const title = torrent.title
+    client.send(JSON.stringify({ status: 'addTorrent', data, location, title }))
   }
 
   removeTorrent (torrent) {
@@ -93,8 +98,12 @@ class Home extends Component {
     this.addTorrent({ location: this.state.location, title: this.state.title, data: this.state.value })
   }
 
-  handleDismiss () {
+  handleDismissError () {
     this.setState({ showError: false })
+  }
+
+  handleDismissSuccess () {
+    this.setState({ showSuccess: false })
   }
 
   render () {
@@ -130,7 +139,8 @@ class Home extends Component {
     )
     return (
       <div>
-        {this.state.showError ? <ErrorAlert error={this.state.error} handler={() => this.handleDismiss()} /> : null}
+        {this.state.showSuccess ? <SuccessAlert message={this.state.message} handler={() => this.handleDismissSuccess()} /> : null}
+        {this.state.showError ? <ErrorAlert error={this.state.error} handler={() => this.handleDismissError()} /> : null}
         <h1>Torrents:</h1>
         <Form onSubmit={this.handleSubmit} className='mb-3'>
           <Container>
@@ -207,6 +217,20 @@ class ErrorAlert extends Component {
         <Alert.Heading>Oh snap! You got an error!</Alert.Heading>
         <p>
           {this.props.error}
+        </p>
+      </Alert>
+    )
+  }
+}
+
+class SuccessAlert extends Component {
+  render () {
+    const handleDismiss = () => this.props.handler()
+    return (
+      <Alert className='mt-2' display='none' variant='success' onClose={handleDismiss} dismissible>
+        <Alert.Heading>Success</Alert.Heading>
+        <p>
+          {this.props.message}
         </p>
       </Alert>
     )
