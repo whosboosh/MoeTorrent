@@ -1,7 +1,7 @@
 const { Router } = require('express')
 const WebTorrent = require('webtorrent')
 const fs = require('fs')
-require('events').EventEmitter.prototype._maxListeners = 20
+require('events').EventEmitter.prototype._maxListeners = 100
 
 const torrentFile = 'public/torrents.json'
 
@@ -31,22 +31,18 @@ const api = (expressWs) => {
         new Promise((resolve) => {
           client.add(torrents[prop].infoHash, opts, (parsedTorrent) => {
             parsedTorrent.on('error', (err) => {
-              reject(err, parsedTorrent)
+              reject(err)
             })
             resolve(parsedTorrent)
           })
         })
           .then((torrent) => subscribeTorrents(client, torrent))
-          .catch((err, parsedTorrent) => { 
+          .catch((err) => {
               for (const user of connectedUsers) {
                 if (user.readyState === 1) {
                   user.send(JSON.stringify({ status: 'error', err }))
                 }
               }
-              parsedTorrent.removeListener('error', () => {
-                console.log('Removed error listener for ' + parsedTorrent.infoHash)
-              }) 
-              console.log(err)
            })
       }
     })
@@ -131,7 +127,7 @@ const api = (expressWs) => {
 
           for (const user of connectedUsers) {
             if (user.readyState === 1) {
-              user.send(JSON.stringify({ status: 'delete', data: destructureTorrent(parsed.data) }))
+              user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
             }
           }
         }
@@ -167,6 +163,10 @@ const subscribeTorrents = (client, torrent) => {
 
   if (torrent.timeRemaining === 0) {
     completeTorrent(torrent)
+      .catch(e => {
+        let err = e.toString()
+        return next(err)
+      })    
   }
 
   torrent.on('download', (bytes) => {
@@ -175,6 +175,10 @@ const subscribeTorrents = (client, torrent) => {
 
   torrent.on('done', () => {
     completeTorrent(torrent)
+      .catch(e => {
+        let err = e.toString()
+        return next(err)
+      })    
   })
 }
 
@@ -219,12 +223,13 @@ const calculateInterval = (torrent) => {
 const possibleIntervals = [1, 2, 4, 10, 50, 100, 200, 400]
 
 const completeTorrent = (torrent) => {
+  return new Promise((resolve, reject) => {
     console.log('Torrent complete')
     removeTorrent(torrent)
       .then(() => console.log('Removed torrent: ' + torrent.infoHash))
       .catch(e => {
         let err = e.toString()
-        return next(err)
+        reject(err)
       })
 
     torrent.removeListener('download', () => {
@@ -235,7 +240,9 @@ const completeTorrent = (torrent) => {
       if (user.readyState === 1) {
         user.send(JSON.stringify({ status: 'complete', data: destructureTorrent(torrent) }))
       }
+      resolve()
     }
+  })
 }
 
 const writeTorrent = (torrent) => {
@@ -299,7 +306,7 @@ const openTorrents = () => {
 
 const destructureTorrent = (torrent) => {
   let file = {
-    name: typeof torrent.files === 'undefined' ? '' : torrent.files[0].name,
+    name: typeof torrent.files[0] === 'undefined' ? '' : torrent.files[0].name,
     infoHash: torrent.infoHash,
     timeRemaining: torrent.timeRemaining,
     received: torrent.received,

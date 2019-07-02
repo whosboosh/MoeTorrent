@@ -7,7 +7,7 @@
     "build": "cross-env NODE_ENV=development webpack --config webpack.config.js",
     "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
     "server": "cross-env NODE_ENV=development node src/server",
-    "server:prod": "cross-env NODE_ENV=production node src/server",
+    "server:prod": "cross-env NODE_ENV=production --max-old-space-size=131,072‬ node src/server",
     "dev": "npm run build && npm run server",
     "prod": "npm run build:prod && npm run server:prod",
     "start": "npm run server:prod"

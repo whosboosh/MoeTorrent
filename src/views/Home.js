@@ -11,7 +11,7 @@ const override = css`
     color: white;
 `;
 
-const client = new WebSocket('ws://localhost:3000/api')
+const client = new WebSocket('ws://localhost:3001/api')
 
 class Home extends Component {
   constructor (props) {
@@ -90,7 +90,7 @@ class Home extends Component {
     }
 
     client.onerror = (err) => {
-      this.setState({ error: parsed.err, showError: true })
+      this.setState({ error: err, showError: true })
     }
   }
 

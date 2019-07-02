@@ -25,7 +25,6 @@ app.use('/', expressStaticGzip('build', {
     orderPreference: ['br']
 }))
 
-
 // Main route
 app.get('/', (req, res) => {
   res.sendFile(buildFolder + '/index.html')
@@ -61,6 +60,6 @@ const errorHandler = (err, req, res, next) => {
 app.use(errorHandler);
 
 
-app.listen(3000, () =>
-  console.log(`Started on port 3000!`)
+app.listen(3001, () =>
+  console.log(`Started on port 3001!`)
 )
