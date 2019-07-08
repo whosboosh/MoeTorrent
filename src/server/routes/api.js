@@ -5,16 +5,19 @@ require('events').EventEmitter.prototype._maxListeners = 100
 
 const torrentFile = 'public/torrents.json'
 
-const connectedUsers = []
+const CONNECTED_USERS = []
+const CURRENT_TORRENTS = {}
 
 const api = (expressWs) => {
   const router = Router()
 
   const client = new WebTorrent()
 
+  writeOnTimer() // Start a timer to write to disk every 60s
+
   client.on('error', (error) => {
     let err = error.toString()
-    for (const user of connectedUsers) {
+    for (const user of CONNECTED_USERS) {
       if (user.readyState === 1) {
         user.send(JSON.stringify({ status: 'error', err }))
       }
@@ -25,6 +28,7 @@ const api = (expressWs) => {
   openTorrents()
     .then(torrents => {
       for (const prop in torrents) {
+        CURRENT_TORRENTS[torrents[prop].infoHash] = torrents[prop]
         let opts = {
           path: torrents[prop].path
         }
@@ -38,7 +42,7 @@ const api = (expressWs) => {
         })
           .then((torrent) => subscribeTorrents(client, torrent))
           .catch((err) => {
-              for (const user of connectedUsers) {
+              for (const user of CONNECTED_USERS) {
                 if (user.readyState === 1) {
                   user.send(JSON.stringify({ status: 'error', err }))
                 }
@@ -54,8 +58,8 @@ const api = (expressWs) => {
     aWss.clients.forEach(user => {
       user.id = generateID()
       user.counter = 0
-      if (connectedUsers.map(e => { return e.id }).indexOf(user.id) === -1) {
-        connectedUsers.push(user)
+      if (CONNECTED_USERS.map(e => { return e.id }).indexOf(user.id) === -1) {
+        CONNECTED_USERS.push(user)
       }
       for (const torrent of client.torrents) {
         if (user.readyState === 1) {
@@ -79,27 +83,21 @@ const api = (expressWs) => {
         client.add(parsed.data, opts, (torrent) => {
           console.log('Adding torrent: ' + torrent.infoHash)
 
-          writeTorrent(destructureTorrent(torrent))
-            .then(() => console.log('Wrote torrent to disk'))
-            .catch(e => {
-              let err = e.toString()
-              return next(err)              
-            })
+          CURRENT_TORRENTS[torrent.infoHash] = torrent
 
           torrent.on('download', (bytes) => {
             sendDownloadInformation(torrent)
           })
 
           torrent.on('done', () => {
-            writeTorrent(destructureTorrent(torrent))
-              .then(() => completeTorrent(torrent))  
+            completeTorrent(torrent)
               .catch(e => {
                 let err = e.toString()
                 return next(err)              
               })              
           })
 
-          for (const user of connectedUsers) {
+          for (const user of CONNECTED_USERS) {
             if (user.readyState === 1) {
               user.send(JSON.stringify({ status: 'start', data: destructureTorrent(torrent) }))
             }
@@ -109,11 +107,7 @@ const api = (expressWs) => {
         const torrent = client.get(parsed.data.infoHash)
 
         if (torrent != null) {
-          removeTorrent(torrent)
-            .catch(e => {
-              let err = e.toString()
-              return next(err)              
-            })         
+          delete CURRENT_TORRENTS[torrent.infoHash]    
           for (let p in torrent._peers) {
             if (torrent._peers[p].wire != null) {
               torrent.wires.push(torrent._peers[p].wire)
@@ -125,7 +119,7 @@ const api = (expressWs) => {
             if (err) return next(err)
           })
 
-          for (const user of connectedUsers) {
+          for (const user of CONNECTED_USERS) {
             if (user.readyState === 1) {
               user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
             }
@@ -183,15 +177,15 @@ const subscribeTorrents = (client, torrent) => {
 }
 
 const sendDownloadInformation = (torrent) => {
-  for (const user of connectedUsers) {
-    const index = connectedUsers.map(e => { return e.id }).indexOf(user.id)
+  for (const user of CONNECTED_USERS) {
+    const index = CONNECTED_USERS.map(e => { return e.id }).indexOf(user.id)
     let interval = calculateInterval(torrent)
     if (user.counter % interval === 0) { 
       if (user.readyState === 1) {
         user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
       } else {
         console.log('Terminating' + user.id)
-        connectedUsers.splice(index, 1)
+        CONNECTED_USERS.splice(index, 1)
         user.terminate()
       }
     }
@@ -225,66 +219,27 @@ const possibleIntervals = [1, 2, 4, 10, 50, 100, 200, 400]
 const completeTorrent = (torrent) => {
   return new Promise((resolve, reject) => {
     console.log('Torrent complete')
-    removeTorrent(torrent)
-      .then(() => console.log('Removed torrent: ' + torrent.infoHash))
-      .catch(e => {
-        let err = e.toString()
-        reject(err)
-      })
+
+    delete CURRENT_TORRENTS[torrent.infoHash]
 
     torrent.removeListener('download', () => {
       console.log('Removed download listener for ' + torrent.infoHash)
     })
 
-    for (const user of connectedUsers) {
+    for (const user of CONNECTED_USERS) {
       if (user.readyState === 1) {
         user.send(JSON.stringify({ status: 'complete', data: destructureTorrent(torrent) }))
       }
-      resolve()
     }
+    resolve()
   })
 }
 
-const writeTorrent = (torrent) => {
+const writeTorrents = () => {
   return new Promise((resolve, reject) => {
-    fs.readFile(torrentFile, 'utf8', (err, data) => {
+    fs.writeFile(torrentFile, JSON.stringify(CURRENT_TORRENTS, null, 4), (err) => {
       if (err) return reject(err)
-      let json
-      try {
-        json = JSON.parse(data)
-      } catch (e) {
-        return reject(e)
-      }
-
-      if (!json[torrent.infoHash]) {
-        json[torrent.infoHash] = torrent
-      }
-
-      fs.writeFile(torrentFile, JSON.stringify(json, null, 4), (err) => {
-        if (err) return reject(err)
-        return resolve()
-      })
-    })
-  })
-}
-
-const removeTorrent = (torrent) => {
-  return new Promise((resolve, reject) => {
-    fs.readFile(torrentFile, (err, data) => {
-      if (err) reject(err)
-      let json
-      try {
-        json = JSON.parse(data)
-      } catch (e) {
-        return reject(e)
-      }
-
-      delete json[torrent.infoHash]
-
-      fs.writeFile(torrentFile, JSON.stringify(json, null, 4), (err) => {
-        if (err) return reject(err)
-        return resolve()
-      })
+      return resolve()
     })
   })
 }
@@ -320,6 +275,13 @@ const destructureTorrent = (torrent) => {
     path: torrent.path
   }
   return file
+}
+
+const writeOnTimer = () => {
+  setInterval(() => {
+    writeTorrents()
+      .catch(e => console.log(e))
+  }, 10000)
 }
 
 function stringToSlug (str) {
