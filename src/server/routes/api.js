@@ -6,16 +6,19 @@ require('events').EventEmitter.prototype._maxListeners = 100
 const torrentFile = 'public/torrents.json'
 
 const CONNECTED_USERS = []
+
 const CURRENT_TORRENTS = {}
+
+const TORRENT_QUEUE = []
+
+const Client = new WebTorrent()
 
 const api = (expressWs) => {
   const router = Router()
 
-  const client = new WebTorrent()
-
   writeOnTimer() // Start a timer to write to disk every 60s
 
-  client.on('error', (error) => {
+  Client.on('error', (error) => {
     let err = error.toString()
     for (const user of CONNECTED_USERS) {
       if (user.readyState === 1) {
@@ -33,14 +36,14 @@ const api = (expressWs) => {
           path: torrents[prop].path
         }
         new Promise((resolve) => {
-          client.add(torrents[prop].infoHash, opts, (parsedTorrent) => {
+          Client.add(torrents[prop].infoHash, opts, (parsedTorrent) => {
             parsedTorrent.on('error', (err) => {
               reject(err)
             })
             resolve(parsedTorrent)
           })
         })
-          .then((torrent) => subscribeTorrents(client, torrent))
+          .then((torrent) => subscribeTorrents(torrent))
           .catch((err) => {
               for (const user of CONNECTED_USERS) {
                 if (user.readyState === 1) {
@@ -61,7 +64,7 @@ const api = (expressWs) => {
       if (CONNECTED_USERS.map(e => { return e.id }).indexOf(user.id) === -1) {
         CONNECTED_USERS.push(user)
       }
-      for (const torrent of client.torrents) {
+      for (const torrent of Client.torrents) {
         if (user.readyState === 1) {
           user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
         }
@@ -73,41 +76,19 @@ const api = (expressWs) => {
       if (typeof parsed.data === 'undefined') {
         return next('No torrent provided')
       } else if (parsed.status === 'addTorrent') {
-        // Add torrent to client
-        let opts = {}
-        if (parsed.location !== '') {
-          opts = {
-            path: `${parsed.location}\\${stringToSlug(parsed.title)}`
-          }
+        if (Object.keys(CURRENT_TORRENTS).length < 50) { // Only allow torrent to be added if its under 50
+          addTorrent(parsed)
+        } else {
+          TORRENT_QUEUE.push(parsed)
+          console.log('Torrent added to queue as it is full')
+          console.table(parsed)
         }
-        client.add(parsed.data, opts, (torrent) => {
-          console.log('Adding torrent: ' + torrent.infoHash)
-
-          CURRENT_TORRENTS[torrent.infoHash] = torrent
-
-          torrent.on('download', (bytes) => {
-            sendDownloadInformation(torrent)
-          })
-
-          torrent.on('done', () => {
-            completeTorrent(torrent)
-              .catch(e => {
-                let err = e.toString()
-                return next(err)              
-              })              
-          })
-
-          for (const user of CONNECTED_USERS) {
-            if (user.readyState === 1) {
-              user.send(JSON.stringify({ status: 'start', data: destructureTorrent(torrent) }))
-            }
-          }
-        })
       } else if (parsed.status === 'removeTorrent') {
-        const torrent = client.get(parsed.data.infoHash)
+        const torrent = Client.get(parsed.data.infoHash)
 
         if (torrent != null) {
-          delete CURRENT_TORRENTS[torrent.infoHash]    
+          delete CURRENT_TORRENTS[torrent.infoHash]   
+           
           for (let p in torrent._peers) {
             if (torrent._peers[p].wire != null) {
               torrent.wires.push(torrent._peers[p].wire)
@@ -115,9 +96,12 @@ const api = (expressWs) => {
           }
           torrent.resume()
 
-          client.remove(torrent, (err) => {
+          Client.remove(torrent, (err) => {
             if (err) return next(err)
           })
+
+          // Add torrent to current torrents from queue
+          addTorrent(TORRENT_QUEUE[0])
 
           for (const user of CONNECTED_USERS) {
             if (user.readyState === 1) {
@@ -127,13 +111,13 @@ const api = (expressWs) => {
         }
 
       } else if (parsed.status === 'pauseTorrent') {
-        const torrent = client.get(parsed.data.infoHash)
+        const torrent = Client.get(parsed.data.infoHash)
         if (torrent != null) {
           torrent.pause()
           torrent.wires = []
         }
       } else if (parsed.status === 'resumeTorrent') {
-        const torrent = client.get(parsed.data.infoHash)
+        const torrent = Client.get(parsed.data.infoHash)
         for (let p in torrent._peers) {
           if (torrent._peers[p].wire != null) {
             torrent.wires.push(torrent._peers[p].wire)
@@ -147,11 +131,46 @@ const api = (expressWs) => {
   return router
 }
 
+const addTorrent = (parsed) => {
+  console.log('Adding torrent')
+  console.table(parsed)
+  // Add torrent to Client
+  let opts = {}
+  if (parsed.location !== '') {
+    opts = {
+      path: `${parsed.location}\\${stringToSlug(parsed.title)}`
+    }
+  }
+  Client.add(parsed.data, opts, (torrent) => {
+    console.log('Adding torrent: ' + torrent.infoHash)
+
+    CURRENT_TORRENTS[torrent.infoHash] = destructureTorrent(torrent)
+
+    torrent.on('download', (bytes) => {
+      sendDownloadInformation(torrent)
+    })
+
+    torrent.on('done', () => {
+      completeTorrent(torrent)
+        .catch(e => {
+          let err = e.toString()
+          return next(err)
+        })
+    })
+
+    for (const user of CONNECTED_USERS) {
+      if (user.readyState === 1) {
+        user.send(JSON.stringify({ status: 'start', data: destructureTorrent(torrent) }))
+      }
+    }
+  })
+}
+
 const generateID = () => {
   return '_' + Math.random().toString(36).substr(2, 9)
 }
 
-const subscribeTorrents = (client, torrent) => {
+const subscribeTorrents = (torrent) => {
   // Add torrents without extra information to array
   console.log('Loaded torrent ' + torrent.infoHash + ' from JSON, subscribing to events')
 
@@ -222,6 +241,9 @@ const completeTorrent = (torrent) => {
 
     delete CURRENT_TORRENTS[torrent.infoHash]
 
+    // Add torrent to current torrents from queue
+    addTorrent(TORRENT_QUEUE[0])
+
     torrent.removeListener('download', () => {
       console.log('Removed download listener for ' + torrent.infoHash)
     })
@@ -236,6 +258,7 @@ const completeTorrent = (torrent) => {
 }
 
 const writeTorrents = () => {
+  console.log(CURRENT_TORRENTS)
   return new Promise((resolve, reject) => {
     fs.writeFile(torrentFile, JSON.stringify(CURRENT_TORRENTS, null, 4), (err) => {
       if (err) return reject(err)
