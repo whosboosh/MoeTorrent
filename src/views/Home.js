@@ -11,7 +11,12 @@ const override = css`
     color: white;
 `;
 
-const client = new WebSocket('ws://localhost:3001/api')
+let client
+if (location.protocol === 'https:') {
+  client = new WebSocket(`wss://${window.location.href.replace(/https?:\/\//i, "")}api`)
+} else {
+  client = new WebSocket(`ws://${window.location.href.replace(/https?:\/\//i, "")}api`)
+}
 
 class Home extends Component {
   constructor (props) {
