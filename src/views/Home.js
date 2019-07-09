@@ -23,6 +23,7 @@ class Home extends Component {
     super(props)
     this.state = {
       torrents: [],
+      completed: [],
       value: '',
       location: '',
       title: '',
@@ -32,7 +33,8 @@ class Home extends Component {
       showStart: false,
       message: '',
       startMessage: '',
-      loading: false
+      loading: false,
+      display: 'downloading'
     }
     this.handleChangeLocation = this.handleChangeLocation.bind(this)
     this.handleChangeValue = this.handleChangeValue.bind(this)
@@ -53,6 +55,9 @@ class Home extends Component {
         const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash) // Find torrent from state
 
         if (index !== -1) {
+          if (typeof torrents[index].paused !== 'undefined') {
+            parsed.data.paused = torrents[index].paused
+          }
           torrents[index] = parsed.data // Update this torrent
         } else {
           torrents.push(parsed.data)
@@ -85,8 +90,12 @@ class Home extends Component {
 
         const message = `${parsed.data.name}(${parsed.data.infoHash}) Finished downloading`
 
+        const completed = this.state.completed
+        torrents[index].downloadSpeed = 0
+        completed.push(torrents[index])
+
         torrents.splice(index, 1)
-        this.setState({ torrents, showSuccess: true, message })        
+        this.setState({ torrents, showSuccess: true, message, completed }) 
       } else if (parsed.status === 'collection') {
         this.setState({ torrents: parsed.data })
       } else if (parsed.status === 'error') {
@@ -111,10 +120,18 @@ class Home extends Component {
   }
 
   pauseTorrent (torrent) {
+    let index = this.state.torrents.map(e => { return e.infoHash }).indexOf(torrent.infoHash)
+    let torrents = this.state.torrents
+    torrents[index].paused = true
+    this.setState({torrents})
     client.send(JSON.stringify({ status: 'pauseTorrent', data: torrent }))
   }
 
   resumeTorrent (torrent) {
+    let index = this.state.torrents.map(e => { return e.infoHash }).indexOf(torrent.infoHash)
+    let torrents = this.state.torrents
+    torrents[index].paused = false
+    this.setState({ torrents })
     client.send(JSON.stringify({ status: 'resumeTorrent', data: torrent }))
   }
 
@@ -148,11 +165,15 @@ class Home extends Component {
     this.setState({ showStart: false })
   }
 
+  changeDisplay (display) {
+    this.setState({ display })
+  }
+
   render () {
-    const torrentItems = this.state.torrents.map((item, key) =>
+    const torrentItems = this.state.torrents.map((item, key) => 
       <Container className='mt-2' key={key}>
         <Card bg='dark' text='white'>
-          <Card.Header className='mb-1'>{item.name}</Card.Header>
+          <Card.Header className='mb-1'>{item.name} {typeof item.paused !== 'undefined' && item.paused ? <p className='text-danger'>Paused</p> : null}</Card.Header>
           <Card.Body className='p-3'>
             <Row>
               <Col xs={8}>
@@ -179,6 +200,34 @@ class Home extends Component {
         </Card>
       </Container>
     )
+    const completedItems = this.state.completed.map((item, key) =>
+      <Container className='mt-2' key={key}>
+        <Card bg='dark' text='white'>
+          <Card.Header className='mb-1'>{item.name} {typeof item.paused !== 'undefined' && item.paused ? <p className='text-danger'>Paused</p> : null}</Card.Header>
+          <Card.Body className='p-3'>
+            <Row>
+              <Col xs={8}>
+                <Row><Col xs={12}>{item.infoHash}</Col></Row>
+                <Row><Col xs={12}>{item.path}</Col></Row>
+              </Col>
+              <Col xs={4}>
+                <Row>
+                  <Col xs={3}><Button variant='danger' onClick={() => this.removeTorrent(item)}>Delete</Button></Col>
+                </Row>
+                <Row>
+                  <Col xs={12}>{(item.downloaded / 1000000).toFixed(1)}MB / {((item.downloaded / 1000000) / (item.progress)).toFixed(1)}MB</Col>
+                  <Col xs={12}>{(item.progress * 100).toFixed(2)}%</Col>
+                  <Col xs={12}>{(item.downloadSpeed / 100000).toFixed(2)}Mb/s</Col>
+                </Row>
+                <Row>
+                  <Col xs={12}>{moment(item.timeRemaining).format('hh:mm')}</Col>
+                </Row>
+              </Col>
+            </Row>
+          </Card.Body>
+        </Card>
+      </Container>
+    )    
     return (
       <div>
         {this.state.showStart ? <StartAlert message={this.state.startMessage} handler={() => this.handleDismissStart()} /> : null}
@@ -253,7 +302,11 @@ class Home extends Component {
             </Card>
           </Container>
         </Form>
-        {torrentItems}
+        <Container>
+          {this.state.display === 'downloading' ? <Button onClick={() => this.changeDisplay('downloading')} className='mr-2' variant='dark'>Downloading</Button> : <Button onClick={() => this.changeDisplay('downloading')} className='mr-2' variant='outline-dark' >Downloading</Button>}
+          {this.state.display === 'completed' ? <Button onClick={() => this.changeDisplay('completed')} className='mr-2' variant='dark'>Completed</Button> : <Button onClick={() => this.changeDisplay('completed')} className='mr-2' variant='outline-dark' >Completed</Button>}
+        </Container>
+        {this.state.display === 'downloading' ? torrentItems : completedItems}
       </div>
     )
   }
