@@ -21,8 +21,12 @@ import WebSocketServer from 'ws'
 
 let client
 if (canUseDOM) {
-  client = new WebSocket('ws://localhost:3001/api')
-} else { 
+  if (location.protocol === 'https:') {
+    client = new WebSocket(`wss://${window.location.href.replace(/https?:\/\//i, "")}api`)
+  } else {
+    client = new WebSocket(`ws://${window.location.href.replace(/https?:\/\//i, "")}api`)
+  }
+} else {
   client = new WebSocketServer('ws://localhost:3001/api')
 }
 
