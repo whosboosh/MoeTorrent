@@ -101,7 +101,9 @@ const api = (expressWs) => {
           })
 
           // Add torrent to current torrents from queue
-          addTorrent(TORRENT_QUEUE[0])
+          if (typeof TORRENT_QUEUE[0] !== 'undefined') {
+            addTorrent(TORRENT_QUEUE[0])
+          }
 
           for (const user of CONNECTED_USERS) {
             if (user.readyState === 1) {
@@ -133,10 +135,9 @@ const api = (expressWs) => {
 
 const addTorrent = (parsed) => {
   console.log('Adding torrent')
-  console.table(parsed)
   // Add torrent to Client
   let opts = {}
-  if (parsed.location !== '') {
+  if (typeof parsed.location !== 'undefined') {
     opts = {
       path: `${parsed.location}\\${stringToSlug(parsed.title)}`
     }
@@ -152,10 +153,7 @@ const addTorrent = (parsed) => {
 
     torrent.on('done', () => {
       completeTorrent(torrent)
-        .catch(e => {
-          let err = e.toString()
-          return next(err)
-        })
+        .catch(e => console.log(e))
     })
 
     for (const user of CONNECTED_USERS) {
@@ -176,10 +174,7 @@ const subscribeTorrents = (torrent) => {
 
   if (torrent.timeRemaining === 0) {
     completeTorrent(torrent)
-      .catch(e => {
-        let err = e.toString()
-        return next(err)
-      })    
+      .catch(e => console.log(e))
   }
 
   torrent.on('download', (bytes) => {
@@ -188,10 +183,7 @@ const subscribeTorrents = (torrent) => {
 
   torrent.on('done', () => {
     completeTorrent(torrent)
-      .catch(e => {
-        let err = e.toString()
-        return next(err)
-      })    
+      .catch(e => console.log(e))  
   })
 }
 
@@ -242,7 +234,9 @@ const completeTorrent = (torrent) => {
     delete CURRENT_TORRENTS[torrent.infoHash]
 
     // Add torrent to current torrents from queue
-    addTorrent(TORRENT_QUEUE[0])
+    if (typeof TORRENT_QUEUE[0] !== 'undefined') {
+      addTorrent(TORRENT_QUEUE[0])
+    }
 
     torrent.removeListener('download', () => {
       console.log('Removed download listener for ' + torrent.infoHash)
