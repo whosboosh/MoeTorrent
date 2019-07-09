@@ -81,7 +81,6 @@ const api = (expressWs) => {
         } else {
           TORRENT_QUEUE.push(parsed)
           console.log('Torrent added to queue as it is full')
-          console.table(parsed)
         }
       } else if (parsed.status === 'removeTorrent') {
         const torrent = Client.get(parsed.data.infoHash)
@@ -252,7 +251,6 @@ const completeTorrent = (torrent) => {
 }
 
 const writeTorrents = () => {
-  console.log(CURRENT_TORRENTS)
   return new Promise((resolve, reject) => {
     fs.writeFile(torrentFile, JSON.stringify(CURRENT_TORRENTS, null, 4), (err) => {
       if (err) return reject(err)
