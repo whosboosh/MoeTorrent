@@ -29,7 +29,7 @@ class App extends Component {
                 path={path}
                 exact={exact}
                 render={(props) => (
-                  <C {...props} {...rest} data={this.props.data} />
+                  <C {...props} {...rest} />
                 )}
               />
             ))}

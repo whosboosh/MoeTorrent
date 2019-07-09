@@ -2,21 +2,18 @@ const webpack = require('webpack')
 const { resolve } = require('path')
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 const webpackMerge = require('webpack-merge')
-const CopyWebpackPlugin = require('copy-webpack-plugin')
-const HtmlWebpackPlugin = require('html-webpack-plugin')
-const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin')
 const OptimizeCssAssetsWebpackPlugin = require('optimize-css-assets-webpack-plugin')
 const BrotliPlugin = require('brotli-webpack-plugin')
 const CompressionPlugin = require('compression-webpack-plugin')
-const { CleanWebpackPlugin } = require('clean-webpack-plugin');
+const { CleanWebpackPlugin } = require('clean-webpack-plugin')
+const { ReactLoadablePlugin } = require('react-loadable/webpack')
 
 const isProduction = process.env.NODE_ENV === 'production'
 
 const projectRoot = resolve(__dirname)
 const sourceFolder = resolve(projectRoot, 'src')
 const buildFolder = resolve(projectRoot, 'build')
-const publicFolder = resolve(projectRoot, 'public')
-const htmlTemplateFile = resolve(publicFolder, 'index.html')
+const jsFolder = resolve(buildFolder, 'js')
 // const torrentsFile = resolve(publicFolder, 'torrents.json')
 
 const babelRule = {
@@ -51,11 +48,13 @@ const sassRule = {
 const baseConfig = {
   mode: 'none',
 
+  target: 'web',
+
   context: projectRoot,
 
   output: {
     path: buildFolder,
-    filename: 'js/[name].js',
+    filename: '[name].js',
     publicPath: '/'
   },
 
@@ -64,13 +63,10 @@ const baseConfig = {
   },
 
   plugins: [
-    new CleanWebpackPlugin(),
-    new CopyWebpackPlugin([
-      {
-        from: publicFolder,
-        ignore: [htmlTemplateFile]
-      }
-    ])
+    //new CleanWebpackPlugin(),
+    new ReactLoadablePlugin({
+      filename: './build/react-loadable.json',
+    })
   ]
 }
 
@@ -79,19 +75,18 @@ const devConfig = {
 
   plugins: [
     new webpack.HotModuleReplacementPlugin(),
-    new HtmlWebpackPlugin({
-      template: htmlTemplateFile,
-      chunksSortMode: 'dependency'
-    })
   ],
 
   devtool: 'inline-source-map',
 
-  entry: [
-    '@babel/polyfill',
-    'webpack-hot-middleware/client?path=/__webpack_hmr&timeout=20000',
-    resolve(sourceFolder, 'index')
-  ],
+  entry: {
+    client: [
+      '@babel/polyfill',
+     'webpack-hot-middleware/client?path=/__webpack_hmr&timeout=20000',
+      resolve(sourceFolder, 'index')
+    ],
+    vendor: ['react', 'react-dom', 'react-router-dom']
+  },
 
   output: {
     hotUpdateChunkFilename: '.hot/[id].[hash].hot-update.js',
@@ -102,10 +97,13 @@ const devConfig = {
 const prodConfig = {
   mode: 'production',
 
-  entry: [
-    '@babel/polyfill',
-    resolve(sourceFolder, 'index')
-  ],
+  entry: {
+    client: [
+      '@babel/polyfill',
+      resolve(sourceFolder, 'index')
+    ],
+    vendor: ['react', 'react-dom', 'react-router-dom']
+  },
 
   optimization: {
     minimize: true,
@@ -119,23 +117,6 @@ const prodConfig = {
 
     new OptimizeCssAssetsWebpackPlugin(),
 
-    new HtmlWebpackPlugin({
-      template: htmlTemplateFile,
-      minify: {
-        removeComments: true,
-        collapseWhitespace: true,
-        removeRedundantAttributes: true,
-        useShortDoctype: true,
-        removeEmptyAttributes: true,
-        removeStyleLinkTypeAttributes: true,
-        keepClosingSlash: true,
-        minifyJS: true,
-        minifyCSS: true,
-        minifyURLs: true
-      },
-      inject: true
-    }),
-    new HtmlWebpackInlineSourcePlugin(),
     new BrotliPlugin({
       asset: '[path].br[query]',
       test: /\.(js|css|html|svg)$/

@@ -4,10 +4,14 @@
   "description": "Simple react torrent app",
   "main": "src/index.js",
   "scripts": {
-    "build": "cross-env NODE_ENV=development webpack --config webpack.config.js",
-    "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
-    "server": "cross-env NODE_ENV=development node src/server",
-    "server:prod": "cross-env NODE_ENV=production node src/server",
+    "build:client": "cross-env NODE_ENV=development webpack --config webpack.client.config.js",
+    "build:server": "cross-env NODE_ENV=development webpack --config webpack.server.config.js",
+    "build:client:prod": "cross-env NODE_ENV=production webpack --config webpack.client.config.js",
+    "build:server:prod": "cross-env NODE_ENV=production webpack --config webpack.server.config.js",
+    "build:prod": "npm run build:client:prod && npm run build:server:prod",
+    "build": "npm run build:client && npm run build:server",
+    "server": "cross-env NODE_ENV=development node build/server/server",
+    "server:prod": "cross-env NODE_ENV=production node build/server/server",
     "dev": "npm run build && npm run server",
     "prod": "npm run build:prod && npm run server:prod",
     "start": "npm run server:prod"
@@ -50,9 +54,11 @@
     "mini-css-extract-plugin": "^0.7.0",
     "morgan": "^1.9.1",
     "node-sass": "^4.12.0",
+    "null-loader": "^3.0.0",
     "optimize-css-assets-webpack-plugin": "^5.0.3",
     "preload-webpack-plugin": "^2.3.0",
     "sass-loader": "^7.1.0",
+    "serialize-javascript": "^1.7.0",
     "style-loader": "^0.23.1",
     "watch-ignore-webpack-plugin": "^1.0.0",
     "webpack": "^4.35.0",
@@ -60,7 +66,8 @@
     "webpack-dev-middleware": "^3.7.0",
     "webpack-dev-server": "^3.7.2",
     "webpack-hot-middleware": "^2.25.0",
-    "webpack-merge": "^4.2.1"
+    "webpack-merge": "^4.2.1",
+    "webpack-node-externals": "^1.7.2"
   },
   "dependencies": {
     "@emotion/core": "^10.0.14",
@@ -81,6 +88,7 @@
     "redux": "^4.0.1",
     "redux-logger": "^3.0.6",
     "redux-thunk": "^2.3.0",
-    "webtorrent": "^0.104.0"
+    "webtorrent": "^0.104.0",
+    "ws": "^7.1.0"
   }
 }

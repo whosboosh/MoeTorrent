@@ -1,8 +1,8 @@
 {
   "plugins": [
     "react-hot-loader/babel",
-    "@babel/plugin-syntax-dynamic-import",
     "react-loadable/babel",
+    "@babel/plugin-syntax-dynamic-import",
     "emotion"
   ],
   "presets": [

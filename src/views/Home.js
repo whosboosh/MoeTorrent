@@ -1,8 +1,8 @@
 import React, { Component } from 'react'
 import { Container, Row, Col, Button, Card, Form, Alert } from 'react-bootstrap'
 import moment from 'moment'
-import { RingLoader } from 'react-spinners';
-import { css } from '@emotion/core';
+import { RingLoader } from 'react-spinners'
+import { css } from '@emotion/core'
 
 const override = css`
     display: block;
@@ -11,7 +11,20 @@ const override = css`
     color: white;
 `;
 
-const client = new WebSocket('ws://localhost:3001/api')
+const canUseDOM = !!(
+  typeof window !== 'undefined' &&
+  window.document &&
+  window.document.createElement
+)
+
+import WebSocketServer from 'ws'
+
+let client
+if (canUseDOM) {
+  client = new WebSocket('ws://localhost:3001/api')
+} else { 
+  client = new WebSocketServer('ws://localhost:3001/api')
+}
 
 class Home extends Component {
   constructor (props) {
