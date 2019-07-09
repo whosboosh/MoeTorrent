@@ -166,7 +166,7 @@ class Home extends Component {
                   <Col xs={3}><Button variant='danger' onClick={() => this.removeTorrent(item)}>Delete</Button></Col>
                 </Row>
                 <Row>
-                  <Col xs={12}>{(item.downloaded / 1000000).toFixed(1)}MB / {((((item.downloaded / (item.progress * 100)) * 100) + item.downloaded) / 1000000).toFixed(1)}MB</Col>
+                  <Col xs={12}>{(item.downloaded / 1000000).toFixed(1)}MB / {((item.downloaded / 1000000) / (item.progress)).toFixed(1)}MB</Col>
                   <Col xs={12}>{(item.progress * 100).toFixed(2)}%</Col>
                   <Col xs={12}>{(item.downloadSpeed / 100000).toFixed(2)}Mb/s</Col>
                 </Row>
