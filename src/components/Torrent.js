@@ -17,6 +17,7 @@ class Torrent extends Component {
       paused: this.props.torrent.paused,
       files: this.props.torrent.files,
       openFiles: false,
+      timeout: setTimeout(() => this.deleteTorrent(), 3000 * 1),
       Client: this.props.Client
     }
   }
@@ -32,6 +33,27 @@ class Torrent extends Component {
     })
   }
 
+  deleteTorrent () {
+    if (this.props.getDeadState()) {
+      this.state.Client.send(JSON.stringify({ status: 'timeout', data: this.objectifyState(this.state) }))
+    }
+  }
+
+  objectifyState (torrent) {
+    let _torrent = {
+      name: torrent.name,
+      infoHash: torrent.infoHash,
+      path: torrent.path,
+      downloaded: torrent.downloaded,
+      progress: torrent.progress,
+      downloadSpeed: torrent.downloadSpeed,
+      timeRemaining: torrent.timeRemaining,
+      paused: torrent.paused,
+      files: torrent.files
+    }
+    return _torrent
+  }
+
   updateTorrent (torrent) {
     let name = torrent.name
     let infoHash = torrent.infoHash
@@ -43,6 +65,9 @@ class Torrent extends Component {
     let paused = torrent.paused
     let files = torrent.files
     this.setState({ name, infoHash, path, downloaded, progress, downloadSpeed, timeRemaining, paused, files })
+
+    // Clear timeout
+    clearTimeout(this.state.timeout)
   }
 
   toggleFiles () {
@@ -73,8 +98,8 @@ class Torrent extends Component {
             <Row>
               <Col xs={8}>
                 <Row><Col xs={12}>{this.state.infoHash}</Col></Row>
-                <Row><Col xs={12}>{this.state.path}</Col></Row>
-                <Row><Col xs={12}><Button onClick={() => this.toggleFiles()}>Files</Button></Col></Row>
+                <Row><Col xs={12}>Download Location: {this.state.path}</Col></Row>
+                <Row><Col xs={12}><Button variant='light' className='mt-1' onClick={() => this.toggleFiles()}>Files</Button></Col></Row>
               </Col>
               <Col xs={4}>
                 <Row>

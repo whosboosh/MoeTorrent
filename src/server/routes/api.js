@@ -81,26 +81,36 @@ const api = (expressWs) => {
 
     ws.on('message', (message) => {
       const parsed = JSON.parse(message)
+
       if (typeof parsed.data === 'undefined') {
+
         return next('No torrent provided')
+
       } else if (parsed.status === 'addTorrent') {
-        // console.log(Object.keys(CURRENT_TORRENTS).length)
-        if (counter < 10) { // Only allow torrent to be added if its under 50
+
+        console.log('Current length: '+Object.keys(CURRENT_TORRENTS).length)
+        if (counter <= 10) { // Only allow torrent to be added if current queue length is under 10
           addTorrent(parsed)
         } else {
           TORRENT_QUEUE.push(parsed)
           console.log('Torrent added to queue as it is full')
         }
+
       } else if (parsed.status === 'removeTorrent') {
+
         removeTorrent(parsed)
+
       } else if (parsed.status === 'pauseTorrent') {
+
         const torrent = Client.get(parsed.data.infoHash)
         if (torrent != null) {
           torrent.pause()
           torrent.wires = []
         }
         torrent.paused = true
+
       } else if (parsed.status === 'resumeTorrent') {
+
         const torrent = Client.get(parsed.data.infoHash)
         for (let p in torrent._peers) {
           if (torrent._peers[p].wire != null) {
@@ -109,12 +119,27 @@ const api = (expressWs) => {
         }
         torrent.paused = false
         torrent.resume()
+      } else if (parsed.status === 'dead') {
+        for (const user of CONNECTED_USERS) {
+          if (user.readyState === 1) {
+            user.send(JSON.stringify({ status: 'dead', data: parsed.data }))
+          }
+        }
+      } else if (parsed.status === 'timeout') {
+        removeTorrent(parsed)
+        for (const user of CONNECTED_USERS) {
+          if (user.readyState === 1) {
+            user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
+          }
+        }
       }
     })
   })
 
   return router
 }
+
+let timeout = {}
 
 const addTorrent = (parsed) => {
   // Add torrent to Client
@@ -125,8 +150,16 @@ const addTorrent = (parsed) => {
     }
   }
   counter++
+  timeout[parsed.data] = setTimeout(() => {
+    removeTorrent(parsed)
+    for (const user of CONNECTED_USERS) {
+      if (user.readyState === 1) {
+        user.send(JSON.stringify({ status: 'timeout', data: parsed.data }))
+      }
+    }
+  }, 15000)
   Client.add(parsed.data, opts, async (torrent) => {
-
+    clearTimeout(timeout[parsed.data])
     // Check if disk has space
     // torrentPath = path.resolve(os.tmpdir(), `webtorrent/${torrent.infoHash}`)
 
@@ -168,11 +201,14 @@ const addTorrent = (parsed) => {
 }
 
 const removeTorrent = (parsed) => {
-  const torrent = Client.get(parsed.data.infoHash)
+  let torrent
+  if (typeof parsed.data.infoHash !== 'undefined') {
+    torrent = Client.get(parsed.data.infoHash)
+  } else {
+    torrent = Client.get(parsed.data)
+  }
 
   if (torrent != null) {
-    delete CURRENT_TORRENTS[torrent.infoHash]
-
     for (let p in torrent._peers) {
       if (torrent._peers[p].wire != null) {
         torrent.wires.push(torrent._peers[p].wire)
@@ -181,19 +217,23 @@ const removeTorrent = (parsed) => {
     torrent.resume()
 
     Client.remove(torrent, (err) => {
-      if (err) return next(err)
-    })
+      if (err) console.log(err)
+      delete CURRENT_TORRENTS[torrent.infoHash]
+      counter-- // Remove one from counter so queue is able to proceed
 
-    // Add torrent to current torrents from queue
-    if (typeof TORRENT_QUEUE[0] !== 'undefined') {
-      addTorrent(TORRENT_QUEUE[0])
-    }
 
-    for (const user of CONNECTED_USERS) {
-      if (user.readyState === 1) {
-        user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
+      console.log('Deleted')
+      // Add torrent to current torrents from queue
+      if (typeof TORRENT_QUEUE[0] !== 'undefined') {
+        addTorrent(TORRENT_QUEUE[0])
       }
-    }
+
+      for (const user of CONNECTED_USERS) {
+        if (user.readyState === 1) {
+          user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
+        }
+      }      
+    })
   }  
 }
 
@@ -309,7 +349,7 @@ const openTorrents = () => {
   })
 }
 
-const destructureTorrent = (torrent) => {
+const destructureTorrent = (torrent, setTimeOut) => {
   let file = {
     name: typeof torrent.files[0] === 'undefined' ? '' : torrent.files[0].name,
     infoHash: torrent.infoHash,
@@ -322,7 +362,7 @@ const destructureTorrent = (torrent) => {
     progress: torrent.progress,
     ratio: torrent.ratio,
     numPeers: torrent.numPeers,
-    path: torrent.path,
+    path: torrent.path, 
     files: torrent.files.map(item => destructureFile(item)),
     paused: typeof torrent.paused !== 'undefined' ? torrent.paused : null,
   }

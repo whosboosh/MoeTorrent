@@ -30,7 +30,8 @@ class Home extends Component {
       startMessage: '',
       loading: false,
       display: 'downloading',
-      Client: this.connect()
+      Client: this.connect(),
+      dead: true
     }
     this.handleChangeLocation = this.handleChangeLocation.bind(this)
     this.handleChangeValue = this.handleChangeValue.bind(this)
@@ -60,7 +61,7 @@ class Home extends Component {
         const message = `${parsed.data.name}(${parsed.data.infoHash}) Deleted`
 
         torrents.splice(index, 1)
-        this.setState({ torrents, showSuccess: true, message })
+        this.setState({ torrents, showSuccess: true, message, loading: false })
       } else if (parsed.status === 'complete') {
         const torrents = this.state.torrents
         const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash)
@@ -75,6 +76,10 @@ class Home extends Component {
         this.setState({ torrents, showSuccess: true, message, completed }) 
       } else if (parsed.status === 'collection') {
         this.setState({ torrents: parsed.data })
+      } else if (parsed.status === 'dead') {
+        this.setState({ dead: parsed.data })
+      } else if (parsed.status === 'timeout') {
+        this.setState({ loading: false, showError: true, error: parsed.data + ' Timed out' })
       } else if (parsed.status === 'error') {
         this.setState({ error: parsed.err, showError: true, loading: false })
       }
@@ -114,6 +119,10 @@ class Home extends Component {
     this.setState({ Client: this.connect(), loading: false })
   }
 
+  getDeadState () {
+    return this.state.dead
+  }
+
   handleChangeValue (event) {
     this.setState({ value: event.target.value })
   }
@@ -144,13 +153,18 @@ class Home extends Component {
     this.setState({ showStart: false })
   }
 
+  toggeDead () {
+    this.state.Client.send(JSON.stringify({ status: 'dead', data: !this.state.dead }))
+    this.setState({ dead: !this.state.dead })
+  }
+
   changeDisplay (display) {
     this.setState({ display })
   }
 
   render () {
     const torrentItems = this.state.torrents.map((item, key) =>
-      <Torrent key={key} Client={this.state.Client} torrent={item} />
+      <Torrent key={key} getDeadState={() => this.getDeadState()}Client={this.state.Client} torrent={item} />
     )
     const completedItems = this.state.completed.map((item, key) =>
       <Container className='mt-2' key={key}>
@@ -187,11 +201,14 @@ class Home extends Component {
         {this.state.showError ? <ErrorAlert error={this.state.error} handler={() => this.handleDismissError()} /> : null}
         <Container>
           <Row>
-            <Col xs={10} >
+            <Col xs={8} >
               <h1>Torrents:</h1>
             </Col>
             <Col xs={2} >
               <Button className='mt-2' onClick={() => this.reconnect()}>Reconnect</Button>
+            </Col>
+            <Col>
+              {this.state.dead ? <Button onClick={() => this.toggeDead()} variant='dark' className='mt-2'>Drop Dead</Button> : <Button onClick={() => this.toggeDead()} variant='outline-dark' className='mt-2'>Drop Dead</Button>}
             </Col>
           </Row>
         </Container>
