@@ -4,6 +4,8 @@ import moment from 'moment'
 import { RingLoader } from 'react-spinners';
 import { css } from '@emotion/core';
 
+import Torrent from '../components/Torrent'
+
 const override = css`
     display: block;
     margin: 0 auto;
@@ -41,28 +43,9 @@ class Home extends Component {
       console.log('Connected to Torrent Server')
     }
 
-    this.state.Client.onmessage = (message) => {
+    this.state.Client.addEventListener('message', (message) => {
       const parsed = JSON.parse(message.data)
-      if (parsed.status === 'update') {
-        const torrents = this.state.torrents
-
-        const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash) // Find torrent from state
-
-        if (index !== -1) {
-          if (typeof torrents[index].paused !== 'undefined') {
-            parsed.data.paused = torrents[index].paused
-          }
-          torrents[index] = parsed.data // Update this torrent
-        } else {
-          torrents.push(parsed.data)
-        }
-
-        if (parsed.data.timeRemaining === 0) {
-          torrents.splice(index, 1)
-        }
-
-        this.setState({ torrents, loading: false })
-      } else if (parsed.status === 'start') {
+      if (parsed.status === 'start') {
         console.log('STARTED')
         const torrents = this.state.torrents
         torrents.push(parsed.data)
@@ -95,7 +78,7 @@ class Home extends Component {
       } else if (parsed.status === 'error') {
         this.setState({ error: parsed.err, showError: true, loading: false })
       }
-    }
+    })
 
     this.state.Client.onerror = (err) => {
       this.setState({ error: err, showError: true })
@@ -109,25 +92,11 @@ class Home extends Component {
     this.state.Client.send(JSON.stringify({ status: 'addTorrent', data, location, title }))
   }
 
+  // DELETE ////////
   removeTorrent (torrent) {
     this.state.Client.send(JSON.stringify({ status: 'removeTorrent', data: torrent }))
   }
-
-  pauseTorrent (torrent) {
-    let index = this.state.torrents.map(e => { return e.infoHash }).indexOf(torrent.infoHash)
-    let torrents = this.state.torrents
-    torrents[index].paused = true
-    this.setState({torrents})
-    this.state.Client.send(JSON.stringify({ status: 'pauseTorrent', data: torrent }))
-  }
-
-  resumeTorrent (torrent) {
-    let index = this.state.torrents.map(e => { return e.infoHash }).indexOf(torrent.infoHash)
-    let torrents = this.state.torrents
-    torrents[index].paused = false
-    this.setState({ torrents })
-    this.state.Client.send(JSON.stringify({ status: 'resumeTorrent', data: torrent }))
-  }
+  ////////
 
   connect () {
     let client
@@ -180,35 +149,8 @@ class Home extends Component {
   }
 
   render () {
-    const torrentItems = this.state.torrents.map((item, key) => 
-      <Container className='mt-2' key={key}>
-        <Card bg='dark' text='white'>
-          <Card.Header className='mb-1'>{item.name} {typeof item.paused !== 'undefined' && item.paused ? <p className='text-danger'>Paused</p> : null}</Card.Header>
-          <Card.Body className='p-3'>
-            <Row>
-              <Col xs={8}>
-                <Row><Col xs={12}>{item.infoHash}</Col></Row>
-                <Row><Col xs={12}>{item.path}</Col></Row>
-              </Col>
-              <Col xs={4}>
-                <Row>
-                  <Col xs={3}><Button variant='warning' onClick={() => this.pauseTorrent(item)}>Stop</Button></Col>
-                  <Col xs={3}><Button variant='success' onClick={() => this.resumeTorrent(item)}>Start</Button></Col>
-                  <Col xs={3}><Button variant='danger' onClick={() => this.removeTorrent(item)}>Delete</Button></Col>
-                </Row>
-                <Row>
-                  <Col xs={12}>{(item.downloaded / 1000000).toFixed(1)}MB / {((item.downloaded / 1000000) / (item.progress)).toFixed(1)}MB</Col>
-                  <Col xs={12}>{(item.progress * 100).toFixed(2)}%</Col>
-                  <Col xs={12}>{(item.downloadSpeed / 100000).toFixed(2)}Mb/s</Col>
-                </Row>
-                <Row>
-                  <Col xs={12}>{moment(item.timeRemaining).format('hh:mm')}</Col>
-                </Row>
-              </Col>
-            </Row>
-          </Card.Body>
-        </Card>
-      </Container>
+    const torrentItems = this.state.torrents.map((item, key) =>
+      <Torrent key={key} Client={this.state.Client} torrent={item} />
     )
     const completedItems = this.state.completed.map((item, key) =>
       <Container className='mt-2' key={key}>
@@ -249,7 +191,7 @@ class Home extends Component {
               <h1>Torrents:</h1>
             </Col>
             <Col xs={2} >
-              <Button onClick={() => this.reconnect()}>Reconnect</Button>
+              <Button className='mt-2' onClick={() => this.reconnect()}>Reconnect</Button>
             </Col>
           </Row>
         </Container>

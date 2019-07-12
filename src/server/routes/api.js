@@ -70,10 +70,12 @@ const api = (expressWs) => {
       if (CONNECTED_USERS.map(e => { return e.id }).indexOf(user.id) === -1) {
         CONNECTED_USERS.push(user)
       }
+      let torrents = []
       for (const torrent of Client.torrents) {
-        if (user.readyState === 1) {
-          user.send(JSON.stringify({ status: 'update', data: destructureTorrent(torrent) }))
-        }
+        torrents.push(destructureTorrent(torrent))
+      }
+      if (user.readyState === 1) {
+        user.send(JSON.stringify({ status: 'collection', data: torrents }))
       }
     }) 
 
@@ -115,7 +117,6 @@ const api = (expressWs) => {
 }
 
 const addTorrent = (parsed) => {
-  console.log('Adding torrent')
   // Add torrent to Client
   let opts = {}
   if (typeof parsed.location !== 'undefined') {
@@ -128,15 +129,12 @@ const addTorrent = (parsed) => {
 
     // Check if disk has space
     // torrentPath = path.resolve(os.tmpdir(), `webtorrent/${torrent.infoHash}`)
-    // console.log((os.platform == "win32") ? process.cwd().split(path.sep)[0] : "/")
 
     let torrentPath = torrent.path
     if (parsed.location === '') {
       torrentPath = (os.platform == "win32") ? process.cwd().split(path.sep)[0] : "/"
     }
     freeSpace = await checkDiskSpace(torrentPath)
-
-
 
     if (torrent.length > freeSpace.free) {
       console.log('Deleting')
@@ -148,9 +146,17 @@ const addTorrent = (parsed) => {
       return removeTorrent(parsed)
     }
 
+    console.log('Torrent added')
+
+    for (const user of CONNECTED_USERS) {
+      if (user.readyState === 1) {
+        user.send(JSON.stringify({ status: 'start', data: destructureTorrent(torrent) }))
+      }
+    }
+
     CURRENT_TORRENTS[torrent.infoHash] = destructureTorrent(torrent)
 
-    torrent.on('download', (bytes) => {
+    torrent.on('download', () => {
       sendDownloadInformation(torrent)
     })
 
@@ -158,12 +164,6 @@ const addTorrent = (parsed) => {
       completeTorrent(torrent)
         .catch(e => console.log(e))
     })
-
-    for (const user of CONNECTED_USERS) {
-      if (user.readyState === 1) {
-        user.send(JSON.stringify({ status: 'start', data: destructureTorrent(torrent) }))
-      }
-    }
   })
 }
 
@@ -323,9 +323,21 @@ const destructureTorrent = (torrent) => {
     ratio: torrent.ratio,
     numPeers: torrent.numPeers,
     path: torrent.path,
-    paused: typeof torrent.paused !== 'undefined' ? torrent.paused : null
+    files: torrent.files.map(item => destructureFile(item)),
+    paused: typeof torrent.paused !== 'undefined' ? torrent.paused : null,
   }
   return file
+}
+
+const destructureFile = (file) => {
+  const _file = {
+    name: file.name,
+    path: file.path,
+    length: file.length,
+    downloaded: file.downloaded,
+    progress: file.progress,
+  }
+  return _file
 }
 
 const writeOnTimer = () => {
