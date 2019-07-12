@@ -1,5 +1,8 @@
 const { Router } = require('express')
 const WebTorrent = require('webtorrent')
+const checkDiskSpace = require('check-disk-space')
+const os = require('os')
+const path = require('path') 
 const fs = require('fs')
 require('events').EventEmitter.prototype._maxListeners = 100
 
@@ -10,6 +13,8 @@ const CONNECTED_USERS = []
 const CURRENT_TORRENTS = {}
 
 const TORRENT_QUEUE = []
+
+let counter = 0
 
 const Client = new WebTorrent()
 
@@ -32,6 +37,7 @@ const api = (expressWs) => {
     .then(torrents => {
       for (const prop in torrents) {
         CURRENT_TORRENTS[torrents[prop].infoHash] = torrents[prop]
+        counter++
         let opts = {
           path: torrents[prop].path
         }
@@ -76,47 +82,22 @@ const api = (expressWs) => {
       if (typeof parsed.data === 'undefined') {
         return next('No torrent provided')
       } else if (parsed.status === 'addTorrent') {
-        if (Object.keys(CURRENT_TORRENTS).length < 50) { // Only allow torrent to be added if its under 50
+        // console.log(Object.keys(CURRENT_TORRENTS).length)
+        if (counter < 10) { // Only allow torrent to be added if its under 50
           addTorrent(parsed)
         } else {
           TORRENT_QUEUE.push(parsed)
           console.log('Torrent added to queue as it is full')
         }
       } else if (parsed.status === 'removeTorrent') {
-        const torrent = Client.get(parsed.data.infoHash)
-
-        if (torrent != null) {
-          delete CURRENT_TORRENTS[torrent.infoHash]   
-           
-          for (let p in torrent._peers) {
-            if (torrent._peers[p].wire != null) {
-              torrent.wires.push(torrent._peers[p].wire)
-            }
-          }
-          torrent.resume()
-
-          Client.remove(torrent, (err) => {
-            if (err) return next(err)
-          })
-
-          // Add torrent to current torrents from queue
-          if (typeof TORRENT_QUEUE[0] !== 'undefined') {
-            addTorrent(TORRENT_QUEUE[0])
-          }
-
-          for (const user of CONNECTED_USERS) {
-            if (user.readyState === 1) {
-              user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
-            }
-          }
-        }
-
+        removeTorrent(parsed)
       } else if (parsed.status === 'pauseTorrent') {
         const torrent = Client.get(parsed.data.infoHash)
         if (torrent != null) {
           torrent.pause()
           torrent.wires = []
         }
+        torrent.paused = true
       } else if (parsed.status === 'resumeTorrent') {
         const torrent = Client.get(parsed.data.infoHash)
         for (let p in torrent._peers) {
@@ -124,6 +105,7 @@ const api = (expressWs) => {
             torrent.wires.push(torrent._peers[p].wire)
           }
         }
+        torrent.paused = false
         torrent.resume()
       }
     })
@@ -141,8 +123,30 @@ const addTorrent = (parsed) => {
       path: `${parsed.location}\\${stringToSlug(parsed.title)}`
     }
   }
-  Client.add(parsed.data, opts, (torrent) => {
-    console.log('Adding torrent: ' + torrent.infoHash)
+  counter++
+  Client.add(parsed.data, opts, async (torrent) => {
+
+    // Check if disk has space
+    // torrentPath = path.resolve(os.tmpdir(), `webtorrent/${torrent.infoHash}`)
+    // console.log((os.platform == "win32") ? process.cwd().split(path.sep)[0] : "/")
+
+    let torrentPath = torrent.path
+    if (parsed.location === '') {
+      torrentPath = (os.platform == "win32") ? process.cwd().split(path.sep)[0] : "/"
+    }
+    freeSpace = await checkDiskSpace(torrentPath)
+
+
+
+    if (torrent.length > freeSpace.free) {
+      console.log('Deleting')
+      for (const user of CONNECTED_USERS) {
+        if (user.readyState === 1) {
+          user.send(JSON.stringify({ status: 'error', err: `Insufficient disk space` }))
+        }
+      }
+      return removeTorrent(parsed)
+    }
 
     CURRENT_TORRENTS[torrent.infoHash] = destructureTorrent(torrent)
 
@@ -161,6 +165,36 @@ const addTorrent = (parsed) => {
       }
     }
   })
+}
+
+const removeTorrent = (parsed) => {
+  const torrent = Client.get(parsed.data.infoHash)
+
+  if (torrent != null) {
+    delete CURRENT_TORRENTS[torrent.infoHash]
+
+    for (let p in torrent._peers) {
+      if (torrent._peers[p].wire != null) {
+        torrent.wires.push(torrent._peers[p].wire)
+      }
+    }
+    torrent.resume()
+
+    Client.remove(torrent, (err) => {
+      if (err) return next(err)
+    })
+
+    // Add torrent to current torrents from queue
+    if (typeof TORRENT_QUEUE[0] !== 'undefined') {
+      addTorrent(TORRENT_QUEUE[0])
+    }
+
+    for (const user of CONNECTED_USERS) {
+      if (user.readyState === 1) {
+        user.send(JSON.stringify({ status: 'delete', data: parsed.data }))
+      }
+    }
+  }  
 }
 
 const generateID = () => {
@@ -231,6 +265,7 @@ const completeTorrent = (torrent) => {
     console.log('Torrent complete')
 
     delete CURRENT_TORRENTS[torrent.infoHash]
+    counter--
 
     // Add torrent to current torrents from queue
     if (typeof TORRENT_QUEUE[0] !== 'undefined') {
@@ -287,7 +322,8 @@ const destructureTorrent = (torrent) => {
     progress: torrent.progress,
     ratio: torrent.ratio,
     numPeers: torrent.numPeers,
-    path: torrent.path
+    path: torrent.path,
+    paused: typeof torrent.paused !== 'undefined' ? torrent.paused : null
   }
   return file
 }

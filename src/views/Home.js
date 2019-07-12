@@ -11,13 +11,6 @@ const override = css`
     color: white;
 `;
 
-let client
-if (location.protocol === 'https:') {
-  client = new WebSocket(`wss://${window.location.href.replace(/https?:\/\//i, "")}api`)
-} else {
-  client = new WebSocket(`ws://${window.location.href.replace(/https?:\/\//i, "")}api`)
-}
-
 class Home extends Component {
   constructor (props) {
     super(props)
@@ -34,7 +27,8 @@ class Home extends Component {
       message: '',
       startMessage: '',
       loading: false,
-      display: 'downloading'
+      display: 'downloading',
+      Client: this.connect()
     }
     this.handleChangeLocation = this.handleChangeLocation.bind(this)
     this.handleChangeValue = this.handleChangeValue.bind(this)
@@ -43,11 +37,11 @@ class Home extends Component {
   }
 
   componentDidMount () {
-    client.onopen = () => {
+    this.state.Client.onopen = () => {
       console.log('Connected to Torrent Server')
     }
 
-    client.onmessage = (message) => {
+    this.state.Client.onmessage = (message) => {
       const parsed = JSON.parse(message.data)
       if (parsed.status === 'update') {
         const torrents = this.state.torrents
@@ -103,7 +97,7 @@ class Home extends Component {
       }
     }
 
-    client.onerror = (err) => {
+    this.state.Client.onerror = (err) => {
       this.setState({ error: err, showError: true })
     }
   }
@@ -112,11 +106,11 @@ class Home extends Component {
     const location = torrent.location
     const data = torrent.data
     const title = torrent.title
-    client.send(JSON.stringify({ status: 'addTorrent', data, location, title }))
+    this.state.Client.send(JSON.stringify({ status: 'addTorrent', data, location, title }))
   }
 
   removeTorrent (torrent) {
-    client.send(JSON.stringify({ status: 'removeTorrent', data: torrent }))
+    this.state.Client.send(JSON.stringify({ status: 'removeTorrent', data: torrent }))
   }
 
   pauseTorrent (torrent) {
@@ -124,7 +118,7 @@ class Home extends Component {
     let torrents = this.state.torrents
     torrents[index].paused = true
     this.setState({torrents})
-    client.send(JSON.stringify({ status: 'pauseTorrent', data: torrent }))
+    this.state.Client.send(JSON.stringify({ status: 'pauseTorrent', data: torrent }))
   }
 
   resumeTorrent (torrent) {
@@ -132,7 +126,23 @@ class Home extends Component {
     let torrents = this.state.torrents
     torrents[index].paused = false
     this.setState({ torrents })
-    client.send(JSON.stringify({ status: 'resumeTorrent', data: torrent }))
+    this.state.Client.send(JSON.stringify({ status: 'resumeTorrent', data: torrent }))
+  }
+
+  connect () {
+    let client
+    if (location.protocol === 'https:') {
+      client = new WebSocket(`wss://${window.location.href.replace(/https?:\/\//i, "")}api`)
+    } else {
+      client = new WebSocket(`ws://${window.location.href.replace(/https?:\/\//i, "")}api`)
+    }
+    return client
+  }
+
+  reconnect () {
+    console.log('Reconnecting')
+    this.state.Client.close()
+    this.setState({ Client: this.connect(), loading: false })
   }
 
   handleChangeValue (event) {
@@ -233,7 +243,16 @@ class Home extends Component {
         {this.state.showStart ? <StartAlert message={this.state.startMessage} handler={() => this.handleDismissStart()} /> : null}
         {this.state.showSuccess ? <SuccessAlert message={this.state.message} handler={() => this.handleDismissSuccess()} /> : null}
         {this.state.showError ? <ErrorAlert error={this.state.error} handler={() => this.handleDismissError()} /> : null}
-        <h1>Torrents:</h1>
+        <Container>
+          <Row>
+            <Col xs={10} >
+              <h1>Torrents:</h1>
+            </Col>
+            <Col xs={2} >
+              <Button onClick={() => this.reconnect()}>Reconnect</Button>
+            </Col>
+          </Row>
+        </Container>
         <Form onSubmit={this.handleSubmit} className='mb-3'>
           <Container>
             <Card bg='light'>
