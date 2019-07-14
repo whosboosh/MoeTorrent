@@ -17,7 +17,6 @@ class Torrent extends Component {
       paused: this.props.torrent.paused,
       files: this.props.torrent.files,
       openFiles: false,
-      timeout: setTimeout(() => this.deleteTorrent(), 3000 * 1),
       Client: this.props.Client
     }
   }
@@ -31,12 +30,6 @@ class Torrent extends Component {
         }
       }
     })
-  }
-
-  deleteTorrent () {
-    if (this.props.getDeadState()) {
-      this.state.Client.send(JSON.stringify({ status: 'timeout', data: this.objectifyState(this.state) }))
-    }
   }
 
   objectifyState (torrent) {
@@ -65,9 +58,6 @@ class Torrent extends Component {
     let paused = torrent.paused
     let files = torrent.files
     this.setState({ name, infoHash, path, downloaded, progress, downloadSpeed, timeRemaining, paused, files })
-
-    // Clear timeout
-    clearTimeout(this.state.timeout)
   }
 
   toggleFiles () {

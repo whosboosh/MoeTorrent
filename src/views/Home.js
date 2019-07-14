@@ -42,11 +42,12 @@ class Home extends Component {
   componentDidMount () {
     this.state.Client.onopen = () => {
       console.log('Connected to Torrent Server')
+      this.state.Client.send(JSON.stringify({ status: 'getDead', data: '' }))
     }
 
     this.state.Client.addEventListener('message', (message) => {
       const parsed = JSON.parse(message.data)
-      if (parsed.status === 'start') {
+      if (parsed.status === 'start') { // on start
         console.log('STARTED')
         const torrents = this.state.torrents
         torrents.push(parsed.data)
@@ -54,7 +55,7 @@ class Home extends Component {
         const startMessage = `${parsed.data.name} has started downloading`
 
         this.setState({ torrents, loading: false, showStart: true, startMessage })        
-      } else if (parsed.status === 'delete') {
+      } else if (parsed.status === 'delete') { // on delete
         const torrents = this.state.torrents
         const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash)
 
@@ -62,7 +63,7 @@ class Home extends Component {
 
         torrents.splice(index, 1)
         this.setState({ torrents, showSuccess: true, message, loading: false })
-      } else if (parsed.status === 'complete') {
+      } else if (parsed.status === 'complete') { // on complete
         const torrents = this.state.torrents
         const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash)
 
@@ -74,13 +75,19 @@ class Home extends Component {
 
         torrents.splice(index, 1)
         this.setState({ torrents, showSuccess: true, message, completed }) 
-      } else if (parsed.status === 'collection') {
+      } else if (parsed.status === 'collection') { // on collection
         this.setState({ torrents: parsed.data })
-      } else if (parsed.status === 'dead') {
+      } else if (parsed.status === 'dead') { //on toggle timeout switch
+        console.log('Setting state of dead to'+ parsed.data)
         this.setState({ dead: parsed.data })
-      } else if (parsed.status === 'timeout') {
-        this.setState({ loading: false, showError: true, error: parsed.data + ' Timed out' })
-      } else if (parsed.status === 'error') {
+      } else if (parsed.status === 'timeout') { // on recieving timeout
+        const torrents = this.state.torrents
+        const index = torrents.map(e => { return e.infoHash }).indexOf(parsed.data.infoHash)
+        if (index !== -1) {
+          torrents.splice(index, 1)
+        }
+        this.setState({ torrents, loading: false, showError: true, error: parsed.data.infoHash + ' Was deleted due to inactivity' })
+      } else if (parsed.status === 'error') { //on Error
         this.setState({ error: parsed.err, showError: true, loading: false })
       }
     })
@@ -119,10 +126,6 @@ class Home extends Component {
     this.setState({ Client: this.connect(), loading: false })
   }
 
-  getDeadState () {
-    return this.state.dead
-  }
-
   handleChangeValue (event) {
     this.setState({ value: event.target.value })
   }
@@ -154,8 +157,7 @@ class Home extends Component {
   }
 
   toggeDead () {
-    this.state.Client.send(JSON.stringify({ status: 'dead', data: !this.state.dead }))
-    this.setState({ dead: !this.state.dead })
+    this.state.Client.send(JSON.stringify({ status: 'dead', data: '' }))
   }
 
   changeDisplay (display) {
@@ -164,7 +166,7 @@ class Home extends Component {
 
   render () {
     const torrentItems = this.state.torrents.map((item, key) =>
-      <Torrent key={key} getDeadState={() => this.getDeadState()}Client={this.state.Client} torrent={item} />
+      <Torrent key={key} Client={this.state.Client} torrent={item} />
     )
     const completedItems = this.state.completed.map((item, key) =>
       <Container className='mt-2' key={key}>
@@ -208,7 +210,7 @@ class Home extends Component {
               <Button className='mt-2' onClick={() => this.reconnect()}>Reconnect</Button>
             </Col>
             <Col>
-              {this.state.dead ? <Button onClick={() => this.toggeDead()} variant='dark' className='mt-2'>Drop Dead</Button> : <Button onClick={() => this.toggeDead()} variant='outline-dark' className='mt-2'>Drop Dead</Button>}
+              {this.state.dead ? <Button onClick={() => this.toggeDead()} variant='dark' className='mt-2'>Kill Inactive</Button> : <Button onClick={() => this.toggeDead()} variant='outline-dark' className='mt-2'>Kill inactive</Button>}
             </Col>
           </Row>
         </Container>
